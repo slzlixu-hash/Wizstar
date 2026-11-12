@@ -26,9 +26,6 @@
     { id: 'network', label: '环境与网络配置' },
   ];
 
-  /* 演示用明文 Key：mock-data 只保存了掩码，离线时眼睛切换展示这段装饰性文本。 */
-  const API_KEY_PLAIN = { deepseek: 'sk-9a2f4c8e71b37a9c' };
-
   /* 新增供应商的类型预设：只填 Base URL，不预置任何本地私有化（本机部署）供应商。 */
   const PROVIDER_PRESETS = {
     OpenAI: 'https://api.openai.com/v1',
@@ -127,19 +124,9 @@
     const models = (provider.models || []).map(function (m) {
       return typeof m === 'string' ? { id: m, name: m } : { id: m.id, name: m.name || m.id };
     });
+    // API Key 已配置时显示「头部 4 字符 + 掩码 + 尾部 4 字符」；未配置显示「未配置」。
+    // 掩码由后端 ApiKeyProtector.Hint 生成，前端只做展示，不入明文、不提供「显示明文」入口。
     const keyMask = provider.apiKey || '未配置';
-    const keyPlain = isLive() ? keyMask : API_KEY_PLAIN[provider.id] || keyMask;
-
-    const tools = `<span class="set-key-tools">
-        <button type="button" class="icon-btn" data-set-eye="${esc(provider.id)}" title="显示 / 隐藏 API Key" aria-label="显示或隐藏 API Key">${ui.icon(
-          'eye-off',
-          16
-        )}</button>
-        <button type="button" class="icon-btn" data-set-key="${esc(provider.id)}" title="配置 API Key" aria-label="配置 API Key">${ui.icon(
-          'pencil',
-          16
-        )}</button>
-      </span>`;
 
     const buttons = [];
     if (provider.secondaryAction) {
@@ -191,9 +178,7 @@
         </div>
         <div class="set-frow set-frow--key">
           <dt>API Key:</dt>
-          <dd class="set-key-line"><span class="set-key-value" data-key-mask="${esc(keyMask)}" data-key-plain="${esc(
-            keyPlain
-          )}" data-plain="0">${esc(keyMask)}</span>${tools}</dd>
+          <dd class="set-key-line"><span class="set-key-value">${esc(keyMask)}</span></dd>
         </div>
         <div class="set-frow set-frow--models">
           <dt>支持模型:</dt>
@@ -758,30 +743,7 @@
         headerModelsBtn.addEventListener('click', () => openModelsModal(S.providers[0] && S.providers[0].id, toast));
       }
 
-      /* ---------- 供应商卡：眼睛 / 编辑 / 配置 Key / 删除 / 支持模型 ---------- */
-      ui.bind(root, '[data-set-eye]', 'click', async (e) => {
-        const btn = e.currentTarget;
-        const card = btn.closest('[data-provider]');
-        const valueEl = card && card.querySelector('.set-key-value');
-        if (!valueEl) return;
-        const show = valueEl.dataset.plain !== '1';
-
-        if (show && isLive()) {
-          const res = await WB.api.request('GET', `/api/llm/providers/${pathId(card.dataset.provider)}/api-key`);
-          if (!res.ok) {
-            toast(`无法读取明文：${res.error || '服务未连接'}`, 'warn');
-            return;
-          }
-          valueEl.dataset.keyPlain = (res.data && res.data.apiKey) || '未配置';
-        }
-
-        valueEl.dataset.plain = show ? '1' : '0';
-        valueEl.textContent = show ? valueEl.dataset.keyPlain : valueEl.dataset.keyMask;
-        btn.innerHTML = ui.icon(show ? 'eye' : 'eye-off', 16);
-        btn.classList.toggle('is-active', show);
-        btn.setAttribute('aria-label', show ? '隐藏 API Key' : '显示 API Key');
-      });
-
+      /* ---------- 供应商卡：编辑 / 配置 Key / 删除 / 支持模型 ---------- */
       ui.bind(root, '[data-set-edit]', 'click', (e) => {
         const provider = findProvider(e.currentTarget.dataset.setEdit);
         if (provider) openProviderModal(provider, 'edit', toast);

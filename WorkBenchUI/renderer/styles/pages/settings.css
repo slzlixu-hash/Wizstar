@@ -365,40 +365,6 @@
   overflow-wrap: anywhere;
 }
 
-.set-key-tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-  margin-left: auto;
-}
-
-.set-key-tools .icon-btn {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  background: transparent;
-  color: var(--text-2);
-}
-
-.set-key-tools .icon-btn:hover {
-  color: var(--cyan-bright);
-  background: rgba(148, 163, 184, 0.12);
-}
-
-.set-key-tools .icon-btn.is-active {
-  color: var(--cyan);
-}
-
-.set-key-tools .icon-btn:last-child {
-  color: var(--blue-bright);
-}
-
-.set-key-tools .icon-btn:last-child:hover {
-  color: #93c5fd;
-  background: rgba(59, 130, 246, 0.14);
-}
-
 .set-frow--models dd {
   display: flex;
   flex-wrap: wrap;

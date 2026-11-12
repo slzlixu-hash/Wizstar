@@ -29,7 +29,8 @@ public sealed record BindingsRequest(Dictionary<string, string>? Bindings);
 ///  - 任何写操作成功后都回一份完整快照，前端无需自行拼接局部状态；
 ///  - chatMode = live 只表示「已按配置装配真实 OpenAI 兼容客户端」，不表示已通过外网验证；
 ///    真实连通性由 POST /api/llm/test 的 /models 探测给出，失败显式标注，不伪造在线；
-///  - API Key 明文只在用户主动点「眼睛」时由 GET 端点返回，永远不进快照、不进日志。
+///  - API Key 明文只由 GET /api/llm/providers/{code}/api-key 主动取回，永远不进快照、不进日志；
+///    列表与设置页只回显「头部 4 字符 + 掩码 + 尾部 4 字符」的 ApiKeyHint。
 /// </summary>
 public static class LlmEndpoints
 {

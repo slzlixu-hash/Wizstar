@@ -65,7 +65,7 @@ public static class ApiKeyProtector
         }
     }
 
-    /// <summary>掩码回显，如 sk-****7a9c；短串只保留 ****。</summary>
+    /// <summary>掩码回显，如 sk-9****7a9c（头部 4 字符 + 掩码 + 尾部 4 字符）；短串只保留 ****。</summary>
     public static string Hint(string plain)
     {
         if (string.IsNullOrEmpty(plain))
@@ -75,7 +75,7 @@ public static class ApiKeyProtector
 
         return plain.Length <= 8
             ? "****"
-            : plain[..3] + "****" + plain[^4..];
+            : plain[..4] + "****" + plain[^4..];
     }
 
     private static byte[] DeriveKey(string? masterKey) =>

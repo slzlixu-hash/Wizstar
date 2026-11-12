@@ -326,7 +326,7 @@
           badge: { text: '已启用', tone: 'green', dot: true },
           enabled: true,
           baseUrl: 'https://api.deepseek.com/v1',
-          apiKey: 'sk-****7a9c',
+          apiKey: 'sk-9****7a9c',
           hasKey: true,
           keyNote: '密文落库，仅在主动查看时取回明文',
           models: [
