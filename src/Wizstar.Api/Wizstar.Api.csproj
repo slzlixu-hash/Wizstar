@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>Wizstar.Api</RootNamespace>
+    <AssemblyName>Wizstar.Api</AssemblyName>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!--
+    本期唯一后端 WebAPI：无 MySQL 依赖（业务库留业务接入阶段），
+    幂等账本用内嵌 SQLite（规范 §4.2），MCP 接入走声明式清单 + 即插即用。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Wizstar.Contracts\Wizstar.Contracts.csproj" />
+    <ProjectReference Include="..\Wizstar.Agents\Wizstar.Agents.csproj" />
+    <ProjectReference Include="..\Wizstar.Mcp\Wizstar.Mcp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 声明式配置随编译输出：agents 名册 + mcp 服务清单，运行时热加载 -->
+    <None Update="config\agents.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="config\mcp-services.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单元测试需要直接验证校验器与运行时内部类型 -->
+    <InternalsVisibleTo Include="Wizstar.Tests" />
+  </ItemGroup>
+
+</Project>

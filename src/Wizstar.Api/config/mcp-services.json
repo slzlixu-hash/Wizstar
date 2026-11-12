@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mcp-demo": {
+      "name": "演示服务（本地）",
+      "transport": "http",
+      "url": "http://127.0.0.1:5307",
+      "autoStart": false
+    }
+  }
+}

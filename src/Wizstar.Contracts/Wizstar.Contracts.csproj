@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 契约层：统一出参信封 / 错误码 / API 异常。零第三方依赖，任何层都可引用。 -->
+  <PropertyGroup>
+    <RootNamespace>Wizstar.Contracts</RootNamespace>
+    <AssemblyName>Wizstar.Contracts</AssemblyName>
+  </PropertyGroup>
+
+</Project>

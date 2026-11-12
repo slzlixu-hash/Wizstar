@@ -1,0 +1,8 @@
+bin/
+obj/
+artifacts/
+data/
+*.user
+.vs/
+node_modules/
+.tmp/

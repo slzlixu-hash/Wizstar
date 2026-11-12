@@ -1,0 +1,9 @@
+{
+  "name": "mcp-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "零依赖本地 MCP 演示服务（Streamable HTTP + 统一信封 + x-risk + 可选 MCP-HMAC）",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

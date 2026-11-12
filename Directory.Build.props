@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+    Wizstar（AgentWorkBench 重写版）全局编译约定。
+    目标框架 net10.0、可空引用开启、隐式 using；分析器保留但不把警告当错误，
+    避免第三方包（MAF / Sqlite / YamlDotNet）的可空性告警阻塞交付。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <NoWarn>$(NoWarn);CS1591;CA1848;CA1873;CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>

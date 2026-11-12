@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MAF 内核：Agent 名册 / 工具总线 / 风险与 HITL / 幂等账本 / 运行时。
+    Microsoft.Agents.AI 1.26.0 为旧项目实测通过的版本（net10.0）。
+  -->
+  <PropertyGroup>
+    <RootNamespace>Wizstar.Agents</RootNamespace>
+    <AssemblyName>Wizstar.Agents</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.26.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Wizstar.Contracts\Wizstar.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

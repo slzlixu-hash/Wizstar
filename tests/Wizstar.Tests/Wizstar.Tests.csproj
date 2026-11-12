@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Wizstar.Tests</RootNamespace>
+    <AssemblyName>Wizstar.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- 集成测试需要 ASP.NET 内核（进程内假 MCP 服务） -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Wizstar.Contracts\Wizstar.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Wizstar.Agents\Wizstar.Agents.csproj" />
+    <ProjectReference Include="..\..\src\Wizstar.Mcp\Wizstar.Mcp.csproj" />
+  </ItemGroup>
+
+</Project>
