@@ -82,6 +82,7 @@ cd src/Wizstar.Api && dotnet run               # API（默认配置见 appsettin
 | GET  /api/mcp/tools | 当前可装配的 MCP 工具（离线服务自动剔除） |
 | GET/POST /api/approvals(/{id}/approve|reject) | HITL 审批单生命周期 |
 | GET  /api/operations/{id}?scope= | 幂等账本反查（孤儿对账） |
+| GET  /api/ui/bootstrap | 前端首屏只读聚合（health / agents / mcp 快照，见 `WorkBenchUI/INTEGRATION.md`） |
 
 ## 关键口径（与三份规范文档对齐）
 
@@ -96,6 +97,12 @@ cd src/Wizstar.Api && dotnet run               # API（默认配置见 appsettin
 4. **注意力保护**：单次运行工具硬上限 8，超限拒绝启动，不静默截断。
 5. **回环直连**：本地 MCP 不走系统代理（`LoopbackBypassProxy`），避免
    HTTP_PROXY 把 127.0.0.1 的请求串成绝对地址转发。
+
+## A1 前后端联调（只读）
+
+`WorkBenchUI` 启动时经 Electron 主进程 IPC 代理拉取 `GET /api/ui/bootstrap`，
+把真实 Agent 名册 / MCP 快照覆盖进界面数据；后端不可用时自动回退演示数据并标注角标。
+启动顺序与验收口径见 `WorkBenchUI/INTEGRATION.md`。
 
 ## 后续阶段
 

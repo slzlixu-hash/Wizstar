@@ -1,18 +1,20 @@
 'use strict';
 
 /**
- * AgentWorkBench 桌面端主进程（纯界面演示）。
+ * AgentWorkBench 桌面端主进程（A1 联调阶段）。
  *
  * 两个窗口：
  *  - 登录窗口：renderer/login.html，无系统边框，自绘标题栏。
  *  - 主窗口：renderer/index.html，无系统边框，自绘标题栏 + 侧边导航。
  *
- * 本阶段只实现界面，不接任何业务接口：窗口控制、登录/退出窗口切换走 IPC，
- * 其余交互全部在渲染进程内用演示数据完成。
+ * 窗口控制、登录/退出窗口切换走 IPC；业务数据通过下面的 IPC 代理只读拉取
+ * 本地 Wizstar.Api（渲染进程 sandbox:true，不直接发起网络请求）。
+ * API 不可用时渲染层自动回退演示数据，不影响界面启动。
  */
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('node:path');
+const { registerApiProxy } = require('./api-proxy');
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 const APP_ICON = path.join(RENDERER_DIR, 'assets', 'app-icon.png');
@@ -122,7 +124,15 @@ ipcMain.on('win:toggle-maximize', (event) => {
 
 ipcMain.on('win:close', (event) => windowFromEvent(event)?.close());
 
-/** 登录 → 打开主窗口并关闭登录窗口（演示：不校验账号密码）。 */
+/* ------------------------------------------------------------------ */
+/* 本地 API 只读代理（A1 联调）                                        */
+/* ------------------------------------------------------------------ */
+
+// 与 scripts/capture.js 共用的实现见 electron/api-proxy.js：
+// 127.0.0.1 白名单 + /api/ 前缀校验 + 2.5s 超时，失败只返回结果、不抛异常。
+registerApiProxy(ipcMain);
+
+/** 登录 → 打开主窗口并关闭登录窗口（A1：账号密码仍为演示模式，不接鉴权）。 */
 ipcMain.on('auth:login', () => {
   createMainWindow();
   if (loginWindow) {

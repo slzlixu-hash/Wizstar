@@ -118,6 +118,7 @@ app.MapAgentEndpoints();
 app.MapApprovalEndpoints();
 app.MapMcpEndpoints();
 app.MapOperationsEndpoints();
+app.MapUiEndpoints();
 
 // ── 健康检查（含账本自检；失败 503，不阻塞其余端点）────────────────────────────
 app.MapGet("/api/health", async (OperationLedger ledger, ChatClientProvider chat, AgentCatalog catalog, McpCatalog mcp, CancellationToken ct) =>

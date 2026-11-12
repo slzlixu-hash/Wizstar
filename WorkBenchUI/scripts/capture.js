@@ -10,11 +10,12 @@
  * 任一页面出现渲染异常（未捕获脚本错误 / console.error）时退出码为 1。
  */
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { registerApiProxy } = require('../electron/api-proxy');
 
 const ROOT = path.resolve(__dirname, '..');
 const RENDERER = path.join(ROOT, 'renderer');
@@ -23,6 +24,10 @@ const OUT_DIR = path.join(ROOT, 'artifacts');
 // 每个实例独立 userData，允许并行截图，避免单实例锁。
 app.setPath('userData', path.join(os.tmpdir(), `workbench-capture-${process.pid}`));
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
+
+// A1：截图脚本自身作为主进程，也需注册本地 API 代理，
+// 否则渲染层 apiGet 会报 "No handler registered" 并降级成演示数据。
+registerApiProxy(ipcMain);
 
 const argv = process.argv.slice(2);
 const onlyArg = argv.find((item) => item.startsWith('--only='));
