@@ -19,6 +19,16 @@
 - 本期内存态：会话历史与审批单在内存（重启即清空），落库属 Phase 1。
 - 演示服务：`node tools/mcp-demo/server.js`（5307）；API 默认 ASPNETCORE_URLS=http://127.0.0.1:5301 可跑通全链路。
 
+## 技术事实（A2 · LLM 与前端联调）
+
+- **本机不部署本地私有化 LLM**（用户明确：机器配置不足）。供应商只保留公网 OpenAI 兼容 API，内置 DeepSeek；本机模型服务方案一律不引入。
+- LLM 配置源：`llm_provider` / `llm_model_definition`（业务表）+ `wiz_llm_agent_binding`（CodeFirst）；种子逐项补缺、内置禁删；API Key AES-256-GCM 密文 + 掩码，明文仅 `GET /api/llm/providers/{code}/api-key` 主动取回。
+- `ChatClientProvider` 按配置签名热切 live/offline；`DescribeOffline()` 给出精确原因；`POST /api/llm/test` 只探 `/models`，不发起计费推理、不伪造在线。
+- **单例共享 SqlSugar 客户端必须用 `SqlSugarScope`（`ISqlSugarClient`）**：普通 `SqlSugarClient` 单例并发会抛 `This MySqlConnection is already in use`（A2 并行预取实测踩过）。
+- `dotnet run` 会被 launchSettings 覆盖端口，验证必须用 `--no-launch-profile --urls http://127.0.0.1:5301`；本机常驻 `ELECTRON_RUN_AS_NODE=1`，直接调 electron.exe 会退化成纯 Node（start-electron.js 已显式删除该变量）。
+- 前端 IPC：`api:get`（A1 只读）+ `api:request`（A2 读写），`WB.api.request` 拆信封、失败收敛为演示降级；设置页写操作返回完整快照后 `WB.api.applyLlm` + `WB.go('settings')` 刷新。
+- 数据口径：真实少于演示时「真实覆盖 + 保留演示」（映射表以演示 6 行为基底）；界面原有元素一律保留，不因接真接口而删减。
+
 ## 协作方式
 
 - 用户是「骑士」：先方案 + 影响面，确认 ok 才动代码；做什么验收什么，不自动放大回归范围。
