@@ -1,0 +1,441 @@
+/* ==========================================================================
+   Agent 团队管理页（页面专属样式，统一前缀 .team-）
+   结构：统计/搜索工具条 → 3 列 × 2 行 Agent 卡 → 搜索空状态
+   ========================================================================== */
+
+.team-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ------------------------------ 顶部工具条 ------------------------------ */
+.team-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 58px;
+  margin: 0 calc(var(--page-pad-x) * -1);
+  padding: 10px var(--page-pad-x);
+  background: linear-gradient(180deg, rgba(18, 29, 50, 0.66), rgba(8, 14, 26, 0.34));
+  border-bottom: 1px solid var(--line);
+}
+
+.team-stats {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.team-stat {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  white-space: nowrap;
+}
+
+.team-stat:first-child {
+  padding-left: 0;
+}
+
+.team-stat + .team-stat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 18px;
+  transform: translateY(-50%);
+  background: var(--line);
+}
+
+.team-stat-label {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.team-stat-label::after {
+  content: "：";
+  color: var(--text-3);
+}
+
+.team-stat-value {
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #f3f8ff;
+}
+
+.team-stat-suffix {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.team-stat .status-dot {
+  width: 7px;
+  height: 7px;
+}
+
+/* 第一位「在线 Agent」整体用绿色强调（呼应参考稿的就绪状态） */
+.team-stat--ok .team-stat-value,
+.team-stat--ok .team-stat-suffix {
+  color: var(--green-text);
+}
+
+.team-delta {
+  display: inline-flex;
+  align-items: center;
+  color: var(--green-text);
+  opacity: 0.92;
+}
+
+.team-spark {
+  display: block;
+  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.35));
+}
+
+.team-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.team-tools .icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.team-tools .search-box .input {
+  height: 32px;
+  border-radius: 9px;
+}
+
+.team-tools .btn {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+
+/* ------------------------------ Agent 卡片网格 ------------------------------ */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.team-card {
+  --tone-rgb: 34, 211, 238;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(124, 160, 214, 0.16);
+  background: linear-gradient(178deg, rgba(20, 30, 52, 0.92), rgba(11, 18, 33, 0.95));
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: transform 0.22s var(--ease), border-color 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+
+/* 卡片顶部渐变光 */
+.team-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 130px;
+  background: radial-gradient(340px 116px at 16% 0%, rgba(var(--tone-rgb), 0.15), transparent 72%);
+  pointer-events: none;
+}
+
+/* 底部一条极淡的色带，hover 时更明显 */
+.team-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 18px 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--tone-rgb), 0.35), transparent);
+  opacity: 0;
+  transition: opacity 0.22s var(--ease);
+  pointer-events: none;
+}
+
+.team-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(var(--tone-rgb), 0.4);
+  box-shadow: 0 26px 56px -32px rgba(0, 0, 0, 0.98), 0 0 0 1px rgba(var(--tone-rgb), 0.1),
+    0 0 34px -14px rgba(var(--tone-rgb), 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.team-card:hover::after {
+  opacity: 1;
+}
+
+/* ------------------------------ 卡片头部 ------------------------------ */
+.team-card-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.team-avatar {
+  flex: none;
+  width: 48px;
+  height: 48px;
+}
+
+.team-avatar .avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 18px !important;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #eaf7ff;
+  border: 1px solid rgba(var(--tone-rgb), 0.5);
+  background: radial-gradient(circle at 32% 24%, rgba(var(--tone-rgb), 0.42), rgba(9, 16, 30, 0.96) 74%);
+  box-shadow: 0 0 0 3px rgba(var(--tone-rgb), 0.08), 0 8px 18px -10px rgba(var(--tone-rgb), 0.7);
+}
+
+.team-ident {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.team-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  /* 右上角状态徽标为绝对定位，名称行预留出徽标宽度，避免长名称被压住 */
+  padding-right: 84px;
+}
+
+.team-name {
+  min-width: 0;
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f3f8ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team-en {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  transform: translateY(-1px);
+}
+
+.team-desc {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  flex: none;
+}
+
+.team-badge .badge {
+  height: 24px;
+}
+
+/* ------------------------------ 卡片正文 ------------------------------ */
+.team-status {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.team-status-label {
+  flex: none;
+  color: var(--text-3);
+}
+
+.team-status-text {
+  min-width: 0;
+  font-style: italic;
+  color: rgba(157, 176, 202, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team-mcp {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.team-mcp-label {
+  flex: none;
+}
+
+.team-mcp .chip {
+  height: 24px;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #c7d6ea;
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.17);
+}
+
+.team-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 16px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.team-meta > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.team-meta b {
+  font-size: 13px;
+  font-weight: 650;
+  color: #e8f0fd;
+}
+
+.team-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.team-actions .btn {
+  flex: 1;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+
+/* ------------------------------ 搜索空状态 ------------------------------ */
+.team-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 56px 24px;
+  border: 1px dashed rgba(124, 160, 214, 0.24);
+  border-radius: 16px;
+  background: rgba(10, 17, 30, 0.4);
+  text-align: center;
+}
+
+.team-empty-ico {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(34, 211, 238, 0.24);
+  background: radial-gradient(circle at 50% 30%, rgba(34, 211, 238, 0.15), rgba(34, 211, 238, 0.02));
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+.team-empty-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.team-empty-desc {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.team-card.is-hidden,
+.team-empty.is-hidden {
+  display: none !important;
+}
+
+/* ------------------------------ 新建 Agent 弹窗表单 ------------------------------ */
+.team-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.team-form-wide {
+  grid-column: 1 / -1;
+}
+
+/* ------------------------------ 设置与记忆弹窗 ------------------------------ */
+.team-mem-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* ------------------------------ 响应式（窄窗口降为两列） ------------------------------ */
+@media (max-width: 1180px) {
+  .team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-stats {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .team-toolbar {
+    flex-wrap: wrap;
+  }
+}

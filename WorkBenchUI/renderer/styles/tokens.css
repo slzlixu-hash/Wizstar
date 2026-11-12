@@ -1,0 +1,324 @@
+/* ==========================================================================
+   AgentWorkBench · 设计令牌 / 基础样式
+   深色科技风：近黑蓝底 + 青蓝主色 + 玻璃卡片。所有页面共用。
+   ========================================================================== */
+
+:root {
+  /* 底色 */
+  --bg: #060a13;
+  --bg-elevated: #0a1120;
+  --bg-sidebar: #070c17;
+  --bg-titlebar: #070c17;
+  --bg-input: rgba(8, 14, 26, 0.78);
+
+  /* 卡片 */
+  --card-from: rgba(21, 31, 54, 0.92);
+  --card-to: rgba(13, 21, 38, 0.94);
+  --card-border: rgba(124, 160, 214, 0.15);
+  --card-border-strong: rgba(124, 160, 214, 0.28);
+  --panel: rgba(12, 19, 34, 0.92);
+
+  /* 文字 */
+  --text-1: #e8eefb;
+  --text-2: #9db0ca;
+  --text-3: #6b7f9e;
+  --text-invert: #04121c;
+
+  /* 主色 */
+  --cyan: #22d3ee;
+  --cyan-bright: #67e8f9;
+  --cyan-soft: rgba(34, 211, 238, 0.12);
+  --blue: #3b82f6;
+  --blue-bright: #60a5fa;
+  --indigo: #6366f1;
+  --violet: #a78bfa;
+  --green: #34d399;
+  --amber: #fbbf24;
+  --rose: #fb7185;
+  --slate: #94a3b8;
+
+  /* 语义色（浅色文字） */
+  --green-text: #6ee7b7;
+  --cyan-text: #7dd3fc;
+  --violet-text: #c4b5fd;
+  --amber-text: #fcd34d;
+  --rose-text: #fda4af;
+
+  /* 边框 / 分割 */
+  --line: rgba(124, 160, 214, 0.14);
+  --line-soft: rgba(124, 160, 214, 0.09);
+  --line-strong: rgba(124, 160, 214, 0.3);
+
+  /* 圆角 */
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+
+  /* 阴影 / 光晕 */
+  --shadow-card: 0 22px 48px -32px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --shadow-pop: 0 24px 60px -24px rgba(0, 0, 0, 0.95);
+  --glow-cyan: 0 0 24px rgba(34, 211, 238, 0.18);
+  --glow-cyan-strong: 0 0 34px rgba(34, 211, 238, 0.3);
+
+  /* 尺寸 */
+  --sidebar-width: 236px;
+  --titlebar-height: 36px;
+  --page-pad-x: 32px;
+
+  /* 字体 */
+  --font-sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+    "Segoe UI", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font-num: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+
+  /* 动效 */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 0.2s;
+}
+
+/* ---------- reset ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+/* 全局背景：极光渐变 + 细网格，比纯色更有层次 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 520px at 12% -12%, rgba(34, 211, 238, 0.09), transparent 60%),
+    radial-gradient(900px 520px at 92% 0%, rgba(99, 102, 241, 0.11), transparent 62%),
+    radial-gradient(800px 500px at 50% 110%, rgba(59, 130, 246, 0.07), transparent 60%);
+  z-index: 0;
+}
+
+h1, h2, h3, h4, p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+svg {
+  display: block;
+  flex: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: #fff;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(124, 160, 214, 0.2);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 160, 214, 0.38);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------- 通用工具类 ---------- */
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.dim {
+  color: var(--text-3);
+}
+
+.tiny {
+  font-size: 11.5px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.gap-2 { gap: 2px; }
+.gap-4 { gap: 4px; }
+.gap-6 { gap: 6px; }
+.gap-8 { gap: 8px; }
+.gap-10 { gap: 10px; }
+.gap-12 { gap: 12px; }
+.gap-14 { gap: 14px; }
+.gap-16 { gap: 16px; }
+.gap-20 { gap: 20px; }
+.gap-24 { gap: 24px; }
+
+.mt-4 { margin-top: 4px; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.mt-24 { margin-top: 24px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ic {
+  flex: none;
+}
+
+/* ---------- 入场动画 ---------- */
+@keyframes wb-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes wb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wb-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.92); }
+}
+
+@keyframes wb-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes wb-shimmer {
+  from { background-position: -220% 0; }
+  to { background-position: 220% 0; }
+}
+
+@keyframes wb-slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wb-flow {
+  to { stroke-dashoffset: -260; }
+}
+
+.anim-up {
+  animation: wb-fade-up 0.5s var(--ease) both;
+}
+
+/* ---------- 拖拽区域 ---------- */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag,
+.no-drag * {
+  -webkit-app-region: no-drag;
+}

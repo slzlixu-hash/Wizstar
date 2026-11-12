@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" fill="none">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="24%" r="88%">
+      <stop offset="0" stop-color="#0e2a3d"/>
+      <stop offset="0.62" stop-color="#050b14"/>
+      <stop offset="1" stop-color="#04080f"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#183a52"/>
+      <stop offset="1" stop-color="#0a1524"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#2f5f85"/>
+      <stop offset="1" stop-color="#12253a"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity=".25"/>
+      <stop offset="0.5" stop-color="#22d3ee" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#0ea5e9" stop-opacity=".35"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="50%" cy="42%" r="50%">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#04080f" stop-opacity="0"/>
+      <stop offset="1" stop-color="#04080f" stop-opacity=".55"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+  </defs>
+
+  <rect width="160" height="160" fill="url(#bg)"/>
+  <g stroke="#9fc4e8" stroke-width="0.6" opacity=".14"><line x1="20" y1="0" x2="20" y2="160" /><line x1="0" y1="20" x2="160" y2="20" /><line x1="40" y1="0" x2="40" y2="160" /><line x1="0" y1="40" x2="160" y2="40" /><line x1="60" y1="0" x2="60" y2="160" /><line x1="0" y1="60" x2="160" y2="60" /><line x1="80" y1="0" x2="80" y2="160" /><line x1="0" y1="80" x2="160" y2="80" /><line x1="100" y1="0" x2="100" y2="160" /><line x1="0" y1="100" x2="160" y2="100" /><line x1="120" y1="0" x2="120" y2="160" /><line x1="0" y1="120" x2="160" y2="120" /><line x1="140" y1="0" x2="140" y2="160" /><line x1="0" y1="140" x2="160" y2="140" /></g>
+  <circle cx="80" cy="72" r="58" fill="url(#aura)"/>
+  <ellipse cx="80" cy="62" rx="40" ry="26" fill="#22d3ee" opacity=".22" filter="url(#glow)"/>
+
+  <circle cx="80" cy="80" r="74" stroke="#22d3ee" stroke-opacity=".26" stroke-width="1.4"/>
+  <circle cx="80" cy="80" r="66" stroke="#22d3ee" stroke-opacity=".12" stroke-width="1" stroke-dasharray="2 7"/>
+
+  <!-- 全息胸像 -->
+  <path d="M20 162 C23 121 47 103 80 103 C113 103 137 121 140 162 Z" fill="url(#body)" stroke="#22d3ee" stroke-opacity=".45"/>
+  <path d="M28 158 C36 132 54 118 80 118 C106 118 124 132 132 158" stroke="#22d3ee" stroke-opacity=".32" stroke-width="1.2"/>
+  <rect x="72" y="83" width="16" height="24" rx="7" fill="#0a1524" stroke="#22d3ee" stroke-opacity=".18"/>
+  <rect x="56" y="31" width="48" height="56" rx="24" fill="url(#head)" stroke="#22d3ee" stroke-opacity=".55" stroke-width="1.4"/>
+  <rect x="55" y="46" width="50" height="18" rx="9" fill="url(#visor)" filter="url(#glow)" opacity=".9"/>
+  <rect x="58" y="47.5" width="44" height="15" rx="7.5" fill="url(#visor)"/>
+  <rect x="64" y="51" width="6" height="8" rx="2" fill="#04121c" opacity=".55"/>
+  <rect x="90" y="51" width="6" height="8" rx="2" fill="#04121c" opacity=".55"/>
+  <path d="M70 92 q10 5 20 0" stroke="#22d3ee" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round"/>
+
+  <!-- 胸甲细节 -->
+  <rect x="59" y="120" width="42" height="26" rx="8" stroke="#22d3ee" stroke-opacity=".22" fill="rgba(8,16,28,.4)"/>
+  <path d="M69 128 h22 M69 134 h16 M69 140 h10" stroke="#22d3ee" stroke-opacity=".28" stroke-width="1.6" stroke-linecap="round"/>
+
+  <g fill="none" stroke="#22d3ee" stroke-linecap="round">
+        <path d="M47 60 A35 35 0 0 1 113 60" stroke-width="2.4" opacity=".85"/>
+        <rect x="41" y="58" width="9" height="16" rx="4" fill="#22d3ee" opacity=".9" stroke="none"/>
+        <rect x="110" y="58" width="9" height="16" rx="4" fill="#22d3ee" opacity=".9" stroke="none"/>
+        <path d="M114 74 q7 10 2 20" stroke-width="2.2" opacity=".7"/>
+      </g>
+      <circle cx="117" cy="96" r="3" fill="#22d3ee" opacity=".95"/>
+      <path d="M80 34 V23" stroke="#22d3ee" stroke-width="2" opacity=".8"/><circle cx="80" cy="21" r="3" fill="#22d3ee"/>
+
+  <path d="M24 96 L44 76" stroke="#eaf6ff" stroke-opacity=".12" stroke-width="2" stroke-linecap="round"/>
+  <path d="M122 110 L138 94" stroke="#eaf6ff" stroke-opacity=".08" stroke-width="2" stroke-linecap="round"/>
+  <rect width="160" height="160" fill="url(#fade)"/>
+</svg>

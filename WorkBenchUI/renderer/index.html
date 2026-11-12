@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentWorkBench · 运营指挥工作台</title>
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/shell.css" />
+    <link rel="stylesheet" href="styles/pages/dashboard.css" />
+    <link rel="stylesheet" href="styles/pages/agents.css" />
+    <link rel="stylesheet" href="styles/pages/mcp.css" />
+    <link rel="stylesheet" href="styles/pages/settings.css" />
+    <link rel="stylesheet" href="styles/pages/placeholders.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- 自绘标题栏 -->
+      <header class="titlebar" id="titlebar">
+        <div class="titlebar-brand">
+          <span id="titlebar-logo"></span>
+          <span>AgentWorkBench</span>
+          <span class="titlebar-hint">智多星电商智能体协同平台</span>
+        </div>
+        <div class="window-controls">
+          <button type="button" data-win="minimize" title="最小化" aria-label="最小化"></button>
+          <button type="button" data-win="maximize" title="最大化" aria-label="最大化"></button>
+          <button type="button" data-win="close" title="关闭" aria-label="关闭"></button>
+        </div>
+      </header>
+
+      <div class="app-body">
+        <!-- 侧边导航 -->
+        <aside class="sidebar">
+          <div class="brand">
+            <span class="brand-logo" id="brand-logo"></span>
+            <div>
+              <div class="brand-name">商品汇商</div>
+              <div class="brand-sub">AGENT WORKBENCH</div>
+            </div>
+          </div>
+          <nav class="nav" id="nav"></nav>
+          <div class="sidebar-foot">
+            <div class="sidebar-service">
+              <i class="status-dot online"></i>
+              <span>本地服务正常</span>
+              <span class="endpoint" id="sidebar-endpoint"></span>
+            </div>
+            <div class="sidebar-version">
+              <span id="sidebar-version"></span>
+              <span class="row gap-6" id="sidebar-mode">纯界面演示</span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 内容区 -->
+        <main class="main">
+          <div class="page-header" id="page-header"></div>
+          <div class="page-body" id="page-body"></div>
+        </main>
+      </div>
+    </div>
+
+    <script src="js/icons.js"></script>
+    <script src="js/mock-data.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/pages/placeholders.js"></script>
+    <script src="js/pages/dashboard.js"></script>
+    <script src="js/pages/agents.js"></script>
+    <script src="js/pages/mcp.js"></script>
+    <script src="js/pages/settings.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

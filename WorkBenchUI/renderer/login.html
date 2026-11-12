@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentWorkBench · 登录</title>
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/shell.css" />
+    <link rel="stylesheet" href="styles/login.css" />
+  </head>
+  <body class="login-body">
+    <div class="login-app">
+      <!-- 自绘标题栏：左上品牌，右侧仅最小化 / 关闭 -->
+      <header class="titlebar login-titlebar">
+        <div class="titlebar-brand login-titlebar-brand">
+          <span class="login-logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6.6 18.4 12 6l5.4 12.4" />
+              <path d="M9.1 14.2h5.8" />
+            </svg>
+          </span>
+          <span class="login-titlebar-name">AgentWorkBench</span>
+        </div>
+        <div class="window-controls login-window-controls">
+          <button type="button" id="login-win-min" title="最小化" aria-label="最小化">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+          <button type="button" id="login-win-close" title="关闭" aria-label="关闭">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="login-main">
+        <!-- 左：品牌主张 + 科技插画 -->
+        <section class="login-hero">
+          <div class="login-illus" aria-hidden="true">
+            <svg class="login-illus-svg" viewBox="0 0 760 520" preserveAspectRatio="xMidYMax slice" focusable="false">
+              <defs>
+                <radialGradient id="lg-halo" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#22d3ee" stop-opacity=".2" />
+                  <stop offset="48%" stop-color="#3b82f6" stop-opacity=".1" />
+                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+                </radialGradient>
+                <radialGradient id="lg-halo-strong" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#67e8f9" stop-opacity=".24" />
+                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+                </radialGradient>
+                <linearGradient id="lg-plate-top" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#1d4ed8" stop-opacity=".42" />
+                  <stop offset="100%" stop-color="#0b1c3c" stop-opacity=".8" />
+                </linearGradient>
+                <linearGradient id="lg-plate-left" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#0f2347" />
+                  <stop offset="100%" stop-color="#081226" />
+                </linearGradient>
+                <linearGradient id="lg-plate-right" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#153366" />
+                  <stop offset="100%" stop-color="#0a1830" />
+                </linearGradient>
+                <linearGradient id="lg-hex-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#0ea5e9" stop-opacity=".5" />
+                  <stop offset="55%" stop-color="#2563eb" stop-opacity=".36" />
+                  <stop offset="100%" stop-color="#1e1b4b" stop-opacity=".62" />
+                </linearGradient>
+                <linearGradient id="lg-beam" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#67e8f9" stop-opacity=".42" />
+                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+                </linearGradient>
+                <linearGradient id="lg-link" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#3b82f6" stop-opacity=".08" />
+                  <stop offset="50%" stop-color="#22d3ee" stop-opacity=".5" />
+                  <stop offset="100%" stop-color="#67e8f9" stop-opacity=".1" />
+                </linearGradient>
+                <pattern id="lg-grid" width="68" height="34" patternUnits="userSpaceOnUse">
+                  <path d="M0 17 L34 0 L68 17 L34 34 Z" fill="none" stroke="rgba(96,165,250,.16)" stroke-width=".9" />
+                </pattern>
+                <linearGradient id="lg-grid-fade" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#fff" stop-opacity="0" />
+                  <stop offset="35%" stop-color="#fff" stop-opacity=".5" />
+                  <stop offset="100%" stop-color="#fff" stop-opacity="1" />
+                </linearGradient>
+                <mask id="lg-grid-mask">
+                  <rect x="-200" y="170" width="1160" height="430" fill="url(#lg-grid-fade)" />
+                </mask>
+                <filter id="lg-blur" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="7" />
+                </filter>
+                <filter id="lg-blur-sm" x="-60%" y="-60%" width="220%" height="220%">
+                  <feGaussianBlur stdDeviation="2.4" />
+                </filter>
+                <filter id="lg-glow" x="-60%" y="-60%" width="220%" height="220%">
+                  <feGaussianBlur stdDeviation="2.4" result="b" />
+                  <feMerge>
+                    <feMergeNode in="b" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              <!-- 背景光晕与光环 -->
+              <g>
+                <ellipse cx="380" cy="332" rx="336" ry="188" fill="url(#lg-halo)" />
+                <ellipse cx="380" cy="388" rx="222" ry="94" fill="url(#lg-halo-strong)" />
+                <circle cx="380" cy="302" r="246" fill="none" stroke="rgba(59,130,246,.16)" stroke-width="1" stroke-dasharray="3 9" />
+                <circle cx="380" cy="302" r="300" fill="none" stroke="rgba(34,211,238,.09)" stroke-width="1" />
+              </g>
+
+              <!-- 透视网格地面 -->
+              <g mask="url(#lg-grid-mask)">
+                <rect x="-160" y="225" width="1080" height="340" fill="url(#lg-grid)" />
+              </g>
+
+              <!-- 背景电路走线 -->
+              <g fill="none" stroke="rgba(96,165,250,.16)" stroke-width="1" stroke-linecap="round">
+                <path d="M-20 262h96l34 34h60" />
+                <path d="M780 208h-92l-30 30h-58" />
+                <path d="M-10 452h72l36-34" />
+                <path d="M790 466h-84l-32-32h-54" />
+              </g>
+              <g fill="rgba(103,232,249,.5)">
+                <rect x="166" y="292" width="4" height="4" rx="1" />
+                <rect x="600" y="234" width="4" height="4" rx="1" />
+                <rect x="96" y="414" width="4" height="4" rx="1" />
+                <rect x="620" y="430" width="4" height="4" rx="1" />
+              </g>
+
+              <!-- 节点连线 -->
+              <g fill="none" stroke-linecap="round">
+                <g stroke="url(#lg-link)" stroke-width="6" opacity=".22" filter="url(#lg-blur-sm)">
+                  <path d="M150 290c60 2 120-46 172-74" />
+                  <path d="M612 274c-60 2-120-30-172-58" />
+                  <path d="M132 426c78-26 156-96 212-152" />
+                  <path d="M636 412c-70-24-150-84-218-138" />
+                </g>
+                <g stroke="url(#lg-link)" stroke-width="1.3">
+                  <path d="M150 290c60 2 120-46 172-74" />
+                  <path d="M612 274c-60 2-120-30-172-58" />
+                  <path d="M132 426c78-26 156-96 212-152" />
+                  <path d="M636 412c-70-24-150-84-218-138" />
+                </g>
+              </g>
+              <circle class="lg-flow-dot" r="3" fill="#a5f3fc" filter="url(#lg-glow)">
+                <animateMotion dur="5.2s" repeatCount="indefinite" path="M150 290c60 2 120-46 172-74" />
+              </circle>
+              <circle class="lg-flow-dot" r="2.6" fill="#7dd3fc" filter="url(#lg-glow)">
+                <animateMotion dur="6.4s" begin="-2.2s" repeatCount="indefinite" path="M636 412c-70-24-150-84-218-138" />
+              </circle>
+
+              <!-- 悬浮全息面板 -->
+              <g transform="translate(74 330) rotate(-8)" opacity=".92">
+                <rect x="-54" y="-36" width="108" height="72" rx="10" fill="rgba(9,20,40,.55)" stroke="rgba(96,165,250,.32)" />
+                <path d="M-40 -18h58M-40 -6h76M-40 6h46M-40 18h66" stroke="rgba(96,165,250,.42)" stroke-width="1.4" stroke-linecap="round" />
+                <circle cx="40" cy="-18" r="2.4" fill="#67e8f9" />
+                <path d="M-54 8h-16" stroke="rgba(96,165,250,.3)" stroke-linecap="round" />
+              </g>
+              <g transform="translate(702 198) rotate(8)" opacity=".9">
+                <rect x="-48" y="-32" width="96" height="64" rx="10" fill="rgba(9,20,40,.5)" stroke="rgba(96,165,250,.3)" />
+                <path d="M-32 18V2M-18 18V-8M-4 18V6M10 18V-16M24 18v-8" stroke="rgba(96,165,250,.42)" stroke-width="2.2" stroke-linecap="round" />
+                <path d="M-36 -22h40" stroke="rgba(103,232,249,.4)" stroke-width="1.4" stroke-linecap="round" />
+              </g>
+
+              <!-- 中央三层平台 -->
+              <g transform="translate(380 400) scale(1.06) translate(-380 -400)">
+                <g>
+                <!-- 底座 -->
+                <path d="M380 305 570 400 380 495 190 400Z" fill="url(#lg-plate-top)" stroke="rgba(96,165,250,.5)" stroke-width="1.2" />
+                <path d="M190 400 380 495v19L190 419Z" fill="url(#lg-plate-left)" stroke="rgba(96,165,250,.28)" stroke-width="1" />
+                <path d="M570 400 380 495v19l190-76Z" fill="url(#lg-plate-right)" stroke="rgba(96,165,250,.28)" stroke-width="1" />
+                <path d="M190 400 380 495 570 400" fill="none" stroke="rgba(103,232,249,.42)" stroke-width="1.2" />
+                <ellipse cx="380" cy="400" rx="196" ry="94" fill="none" stroke="rgba(34,211,238,.14)" stroke-width="5" filter="url(#lg-blur-sm)" />
+                <!-- 中台 -->
+                <path d="M380 334 518 400 380 466 242 400Z" fill="url(#lg-plate-top)" stroke="rgba(96,165,250,.55)" stroke-width="1.2" />
+                <path d="M242 400 380 466v15l-138-67Z" fill="url(#lg-plate-left)" stroke="rgba(96,165,250,.3)" stroke-width="1" />
+                <path d="M518 400 380 466v15l138-67Z" fill="url(#lg-plate-right)" stroke="rgba(96,165,250,.3)" stroke-width="1" />
+                <path d="M242 400 380 466 518 400" fill="none" stroke="rgba(103,232,249,.5)" stroke-width="1.2" />
+                <!-- 顶台 -->
+                <path d="M380 356 472 400 380 444 288 400Z" fill="url(#lg-plate-top)" stroke="rgba(103,232,249,.6)" stroke-width="1.2" />
+                <path d="M288 400 380 444v12l-92-44Z" fill="url(#lg-plate-left)" stroke="rgba(96,165,250,.34)" stroke-width="1" />
+                <path d="M472 400 380 444v12l92-44Z" fill="url(#lg-plate-right)" stroke="rgba(96,165,250,.34)" stroke-width="1" />
+                <path d="M288 400 380 444 472 400" fill="none" stroke="rgba(165,243,252,.55)" stroke-width="1.1" />
+                <ellipse cx="380" cy="400" rx="96" ry="46" fill="none" stroke="rgba(34,211,238,.2)" stroke-width="3" filter="url(#lg-blur-sm)" />
+              </g>
+
+              <!-- 平台到核心的光柱 -->
+              <path d="M354 278 406 278 452 386 308 386Z" fill="url(#lg-beam)" opacity=".55" />
+              <path d="M368 278 392 278 404 386 356 386Z" fill="rgba(103,232,249,.24)" filter="url(#lg-blur-sm)" />
+
+              <!-- 中心 AI 核心六边形 -->
+              <g class="lg-core">
+                <path d="M380 146 435 178v64L380 274 325 242v-64Z" fill="rgba(34,211,238,.05)" stroke="rgba(34,211,238,.16)" stroke-width="12" filter="url(#lg-blur)" />
+                <path d="M380 146 435 178v64L380 274 325 242v-64Z" fill="url(#lg-hex-fill)" stroke="rgba(103,232,249,.9)" stroke-width="1.6" />
+                <path d="M380 162 421 186v48L380 258 339 234v-48Z" fill="rgba(6,18,38,.78)" stroke="rgba(34,211,238,.4)" stroke-width="1" />
+                <text class="lg-ai-text" x="380" y="226" text-anchor="middle" filter="url(#lg-glow)">AI</text>
+                <g fill="#a5f3fc">
+                  <circle cx="380" cy="146" r="2.6" />
+                  <circle cx="435" cy="178" r="2.6" />
+                  <circle cx="435" cy="242" r="2.6" />
+                  <circle cx="380" cy="274" r="2.6" />
+                  <circle cx="325" cy="242" r="2.6" />
+                  <circle cx="325" cy="178" r="2.6" />
+                </g>
+                <ellipse cx="380" cy="210" rx="124" ry="40" transform="rotate(-16 380 210)" fill="none" stroke="rgba(103,232,249,.24)" stroke-width="1" transform-origin="380 210" />
+                <circle cx="486" cy="184" r="2.8" fill="#67e8f9" filter="url(#lg-glow)" />
+              </g>
+              </g>
+
+              <!-- 周围漂浮模块 -->
+              <g class="lg-node" transform="translate(150 268) scale(1.1)">
+                <ellipse cx="0" cy="8" rx="58" ry="24" fill="rgba(34,211,238,.12)" filter="url(#lg-blur-sm)" />
+                <path d="M0-24 46 0 0 24-46 0Z" fill="rgba(30,64,140,.4)" stroke="rgba(96,165,250,.5)" stroke-width="1" />
+                <path d="M-46 0 0 24v18L-46 18Z" fill="rgba(14,30,64,.9)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <path d="M46 0 0 24v18L46 18Z" fill="rgba(20,44,92,.85)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <rect x="-19" y="-19" width="38" height="38" rx="10" fill="rgba(6,16,34,.82)" stroke="rgba(103,232,249,.48)" stroke-width="1" />
+                <g transform="translate(0 -10)">
+                  <svg x="-10" y="0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 20V4" /><path d="M4 20h16" /><path d="M8.2 16.4V11M12.4 16.4V7.4M16.6 16.4v-3.6" />
+                  </svg>
+                </g>
+                <circle cx="0" cy="30" r="2.2" fill="#67e8f9" filter="url(#lg-glow)" />
+              </g>
+              <g class="lg-node" transform="translate(612 252) scale(1.1)">
+                <ellipse cx="0" cy="8" rx="58" ry="24" fill="rgba(34,211,238,.12)" filter="url(#lg-blur-sm)" />
+                <path d="M0-24 46 0 0 24-46 0Z" fill="rgba(30,64,140,.4)" stroke="rgba(96,165,250,.5)" stroke-width="1" />
+                <path d="M-46 0 0 24v18L-46 18Z" fill="rgba(14,30,64,.9)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <path d="M46 0 0 24v18L46 18Z" fill="rgba(20,44,92,.85)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <rect x="-19" y="-19" width="38" height="38" rx="10" fill="rgba(6,16,34,.82)" stroke="rgba(103,232,249,.48)" stroke-width="1" />
+                <g transform="translate(0 -10)">
+                  <svg x="-10" y="0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="7" y="7" width="10" height="10" rx="2" /><path d="M10 3.4v3.6M14 3.4v3.6M10 17v3.6M14 17v3.6M3.4 10h3.6M3.4 14h3.6M17 10h3.6M17 14h3.6" />
+                  </svg>
+                </g>
+                <circle cx="0" cy="30" r="2.2" fill="#67e8f9" filter="url(#lg-glow)" />
+              </g>
+              <g class="lg-node" transform="translate(132 404) scale(1.1)">
+                <ellipse cx="0" cy="8" rx="58" ry="24" fill="rgba(34,211,238,.12)" filter="url(#lg-blur-sm)" />
+                <path d="M0-24 46 0 0 24-46 0Z" fill="rgba(30,64,140,.4)" stroke="rgba(96,165,250,.5)" stroke-width="1" />
+                <path d="M-46 0 0 24v18L-46 18Z" fill="rgba(14,30,64,.9)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <path d="M46 0 0 24v18L46 18Z" fill="rgba(20,44,92,.85)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <rect x="-19" y="-19" width="38" height="38" rx="10" fill="rgba(6,16,34,.82)" stroke="rgba(103,232,249,.48)" stroke-width="1" />
+                <g transform="translate(0 -10)">
+                  <svg x="-10" y="0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m12 3 8 4.4v9.2L12 21l-8-4.4V7.4L12 3Z" /><path d="m4.4 7.7 7.6 4.2 7.6-4.2" /><path d="M12 12v8.6" />
+                  </svg>
+                </g>
+                <circle cx="0" cy="30" r="2.2" fill="#67e8f9" filter="url(#lg-glow)" />
+              </g>
+              <g class="lg-node" transform="translate(636 390) scale(1.1)">
+                <ellipse cx="0" cy="8" rx="58" ry="24" fill="rgba(34,211,238,.12)" filter="url(#lg-blur-sm)" />
+                <path d="M0-24 46 0 0 24-46 0Z" fill="rgba(30,64,140,.4)" stroke="rgba(96,165,250,.5)" stroke-width="1" />
+                <path d="M-46 0 0 24v18L-46 18Z" fill="rgba(14,30,64,.9)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <path d="M46 0 0 24v18L46 18Z" fill="rgba(20,44,92,.85)" stroke="rgba(96,165,250,.25)" stroke-width="1" />
+                <rect x="-19" y="-19" width="38" height="38" rx="10" fill="rgba(6,16,34,.82)" stroke="rgba(103,232,249,.48)" stroke-width="1" />
+                <g transform="translate(0 -10)">
+                  <svg x="-10" y="0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m12 3.4 1.8 4.8 4.8 1.8-4.8 1.8L12 16.6l-1.8-4.8-4.8-1.8 4.8-1.8L12 3.4Z" /><path d="m18.6 15.4.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9.9-2.3Z" />
+                  </svg>
+                </g>
+                <circle cx="0" cy="30" r="2.2" fill="#67e8f9" filter="url(#lg-glow)" />
+              </g>
+
+              <!-- 漂浮粒子 -->
+              <g class="lg-particles" fill="#7dd3fc">
+                <circle class="lg-p" cx="222" cy="152" r="1.8" style="animation-delay: -0.4s" />
+                <circle class="lg-p" cx="302" cy="112" r="1.4" style="animation-delay: -1.6s" />
+                <circle class="lg-p" cx="468" cy="118" r="2" style="animation-delay: -2.4s" />
+                <circle class="lg-p" cx="562" cy="148" r="1.5" style="animation-delay: -3.1s" />
+                <circle class="lg-p" cx="686" cy="248" r="1.7" style="animation-delay: -0.9s" />
+                <circle class="lg-p" cx="84" cy="222" r="1.5" style="animation-delay: -2.8s" />
+                <circle class="lg-p" cx="252" cy="338" r="1.9" style="animation-delay: -1.2s" />
+                <circle class="lg-p" cx="506" cy="344" r="1.6" style="animation-delay: -3.6s" />
+                <circle class="lg-p" cx="320" cy="476" r="1.8" style="animation-delay: -2s" />
+                <circle class="lg-p" cx="520" cy="470" r="1.4" style="animation-delay: -0.6s" />
+                <circle class="lg-p" cx="704" cy="428" r="1.6" style="animation-delay: -3.3s" />
+                <circle class="lg-p" cx="56" cy="438" r="1.5" style="animation-delay: -1.9s" />
+                <circle class="lg-p" cx="414" cy="86" r="1.3" style="animation-delay: -2.7s" />
+                <circle class="lg-p" cx="182" cy="470" r="1.7" style="animation-delay: -4s" />
+              </g>
+            </svg>
+          </div>
+
+          <div class="login-hero-copy">
+            <h1 class="login-hero-title" id="login-product">AgentWorkBench</h1>
+            <h2 class="login-hero-sub" id="login-platform">智多星电商智能体协同平台</h2>
+            <p class="login-tagline" id="login-tagline">多智能体协同 · 驱动矩阵电商全自动闭环</p>
+          </div>
+        </section>
+
+        <!-- 右：玻璃登录卡 -->
+        <section class="login-side">
+          <div class="login-side-inner">
+            <div class="login-card">
+              <div class="login-card-head">
+                <span class="login-card-badge" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6.6 18.4 12 6l5.4 12.4" />
+                    <path d="M9.1 14.2h5.8" />
+                  </svg>
+                </span>
+                <span class="login-card-brand">智多星</span>
+              </div>
+              <h2 class="login-welcome">欢迎登录</h2>
+
+              <form class="login-form" id="login-form" novalidate>
+                <div class="input-wrap login-field" id="login-field-user">
+                  <svg class="ic lead" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8.4" r="3.8" />
+                    <path d="M4.8 20.2c.7-3.6 3.7-5.8 7.2-5.8s6.5 2.2 7.2 5.8" />
+                  </svg>
+                  <input class="input login-input" id="login-username" name="username" type="text" placeholder="账号 / 手机号" autocomplete="username" spellcheck="false" />
+                </div>
+
+                <div class="input-wrap login-field" id="login-field-password">
+                  <svg class="ic lead" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4.8" y="10.4" width="14.4" height="10.2" rx="2.4" />
+                    <path d="M8.2 10.4V8a3.8 3.8 0 0 1 7.6 0v2.4" />
+                    <path d="M12 14.6v2.4" />
+                  </svg>
+                  <input class="input login-input" id="login-password" name="password" type="password" placeholder="登录密码" autocomplete="current-password" spellcheck="false" />
+                  <span class="trail">
+                    <button type="button" class="login-eye" id="login-eye" title="显示密码" aria-label="显示密码">
+                      <svg class="ic login-eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2.8 12S6 5.8 12 5.8 21.2 12 21.2 12 18 18.2 12 18.2 2.8 12 2.8 12Z" />
+                        <circle cx="12" cy="12" r="2.9" />
+                      </svg>
+                      <svg class="ic login-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4.5 20 20" />
+                        <path d="M9.8 5.9A9.6 9.6 0 0 1 12 5.8c6 0 9.2 6.2 9.2 6.2a17 17 0 0 1-3.1 3.9" />
+                        <path d="M6.3 7.6A16.7 16.7 0 0 0 2.8 12S6 18.2 12 18.2a10 10 0 0 0 4.4-1" />
+                        <path d="M10 10a2.9 2.9 0 0 0 4 4" />
+                      </svg>
+                    </button>
+                  </span>
+                </div>
+
+                <label class="checkbox login-remember" id="login-remember">
+                  <input type="checkbox" id="login-remember-input" />
+                  <span class="box">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="m5 12.5 4.2 4.2L19 6.8" />
+                    </svg>
+                  </span>
+                  <span>记住账号并自动登录</span>
+                </label>
+
+                <button type="submit" class="login-submit" id="login-submit">
+                  <span class="login-submit-label">立即登录</span>
+                </button>
+              </form>
+            </div>
+
+            <div class="login-meta">
+              <span class="login-service">
+                <i class="status-dot online"></i>
+                <span>本地服务连接正常</span>
+                <span class="mono login-endpoint" id="login-endpoint">(127.0.0.1:5210)</span>
+              </span>
+              <span class="login-version num" id="login-version">v1.9.0-MVP</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="js/icons.js"></script>
+    <script src="js/mock-data.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/login.js"></script>
+  </body>
+</html>
