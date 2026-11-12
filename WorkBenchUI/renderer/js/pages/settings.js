@@ -10,8 +10,9 @@
  *     后端不可用时自动降级为演示交互，不产生 console.error、不白屏。
  *     风控 / 环境两个 Tab 仍为本地演示数据（本期不做业务表写入）。
  *
- * 保留原有全部元素：页头操作区、三个 Tab、供应商卡内 Base URL / API Key（眼睛+铅笔）/
+ * 保留原有全部元素：页头操作区、三个 Tab、供应商卡内 Base URL / API Key（掩码回显）/
  * 支持模型 chips / 底部按钮、Agent 分派表、虚线添加卡、添加自定义供应商链接。
+ * 单独「配置 API Key」按钮已取消，API Key 录入合并进「编辑供应商」弹框（留空=不修改）。
  */
 (function () {
   const WB = window.WB;
@@ -137,16 +138,6 @@
           size: 'sm',
           cls: 'set-btn-quiet',
           attrs: `data-set-edit="${esc(provider.id)}"`,
-        })
-      );
-    }
-    if (provider.primaryAction) {
-      buttons.push(
-        ui.btn({
-          label: provider.primaryAction,
-          tone: 'primary',
-          size: 'sm',
-          attrs: `data-set-key="${esc(provider.id)}"`,
         })
       );
     }
@@ -347,33 +338,29 @@
     return el ? String(el.value || '').trim() : '';
   }
 
-  function openProviderModal(provider, mode, toast) {
-    const isKey = mode === 'key';
-    const body = isKey
-      ? `<div class="set-form">
-          <label class="field">
-            <span class="field-label">API Key</span>
-            ${ui.input({ type: 'password', placeholder: 'sk-...（留空则清除已保存的 Key）', attrs: 'data-f="apiKey"' })}
-          </label>
-          <div class="field-hint">${esc(provider.keyNote || '密文落库，仅主动查看时取回明文')}</div>
-        </div>`
-      : `<div class="set-form">
-          <label class="field">
-            <span class="field-label">供应商名称</span>
-            ${ui.input({ value: provider.name, attrs: 'data-f="name"' })}
-          </label>
-          <label class="field">
-            <span class="field-label">Base URL</span>
-            ${ui.input({ value: provider.baseUrl, attrs: 'data-f="baseUrl"' })}
-          </label>
-          <label class="field">
-            <span class="field-label">启用状态</span>
-            ${ui.switchControl({ checked: provider.enabled !== false, attrs: 'data-f="enabled"' })}
-          </label>
-        </div>`;
+  function openProviderModal(provider, toast) {
+    const body = `<div class="set-form">
+        <label class="field">
+          <span class="field-label">供应商名称</span>
+          ${ui.input({ value: provider.name, attrs: 'data-f="name"' })}
+        </label>
+        <label class="field">
+          <span class="field-label">Base URL</span>
+          ${ui.input({ value: provider.baseUrl, attrs: 'data-f="baseUrl"' })}
+        </label>
+        <label class="field">
+          <span class="field-label">API Key</span>
+          ${ui.input({ type: 'password', placeholder: 'sk-...（留空则不修改已保存的 Key）', attrs: 'data-f="apiKey"' })}
+        </label>
+        <div class="field-hint">${esc(provider.keyNote || '密文落库，界面仅回显「头4+掩码+尾4」；留空表示保持原 Key 不变。')}</div>
+        <label class="field">
+          <span class="field-label">启用状态</span>
+          ${ui.switchControl({ checked: provider.enabled !== false, attrs: 'data-f="enabled"' })}
+        </label>
+      </div>`;
 
     const overlay = ui.modal({
-      title: `${isKey ? '配置 API Key' : '编辑供应商'} · ${esc(provider.name)}`,
+      title: `编辑供应商 · ${esc(provider.name)}`,
       desc: isLive() ? '保存后立即生效，模型通道会按新配置热切换。' : '演示界面：修改仅保存在当前页面，不会写入真实配置。',
       body,
       actions: `${ui.btn({ label: '取消', tone: 'ghost', attrs: 'data-modal-close' })}${ui.btn({
@@ -385,29 +372,22 @@
 
     overlay.addEventListener('click', async (e) => {
       if (!e.target.closest('[data-set-form-ok]')) return;
-      let res;
-      if (isKey) {
-        res = await call(
-          'PUT',
-          `/api/llm/providers/${pathId(provider.id)}/api-key`,
-          { apiKey: field(overlay, 'apiKey') },
-          toast,
-          'API Key 已加密保存'
-        );
-      } else {
-        const enabledEl = overlay.querySelector('[data-f="enabled"]');
-        res = await call(
-          'PUT',
-          `/api/llm/providers/${pathId(provider.id)}`,
-          {
-            name: field(overlay, 'name'),
-            baseUrl: field(overlay, 'baseUrl'),
-            enabled: enabledEl ? !!enabledEl.checked : undefined,
-          },
-          toast,
-          '供应商配置已更新'
-        );
-      }
+      const enabledEl = overlay.querySelector('[data-f="enabled"]');
+      const apiKey = field(overlay, 'apiKey');
+      const body = {
+        name: field(overlay, 'name'),
+        baseUrl: field(overlay, 'baseUrl'),
+        enabled: enabledEl ? !!enabledEl.checked : undefined,
+      };
+      // 仅当用户输入了 Key 才随编辑一起提交，避免空串误清空已保存 Key。
+      if (apiKey) body.apiKey = apiKey;
+      const res = await call(
+        'PUT',
+        `/api/llm/providers/${pathId(provider.id)}`,
+        body,
+        toast,
+        '供应商配置已更新'
+      );
       if (res && (res.ok || res.demo)) overlay.close();
     });
   }
@@ -743,15 +723,10 @@
         headerModelsBtn.addEventListener('click', () => openModelsModal(S.providers[0] && S.providers[0].id, toast));
       }
 
-      /* ---------- 供应商卡：编辑 / 配置 Key / 删除 / 支持模型 ---------- */
+      /* ---------- 供应商卡：编辑（含 API Key）/ 删除 / 支持模型 ---------- */
       ui.bind(root, '[data-set-edit]', 'click', (e) => {
         const provider = findProvider(e.currentTarget.dataset.setEdit);
-        if (provider) openProviderModal(provider, 'edit', toast);
-      });
-
-      ui.bind(root, '[data-set-key]', 'click', (e) => {
-        const provider = findProvider(e.currentTarget.dataset.setKey);
-        if (provider) openProviderModal(provider, 'key', toast);
+        if (provider) openProviderModal(provider, toast);
       });
 
       ui.bind(root, '[data-set-delete]', 'click', async (e) => {

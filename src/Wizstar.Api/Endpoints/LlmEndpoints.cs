@@ -11,7 +11,7 @@ namespace Wizstar.Api.Endpoints;
 public sealed record SaveProviderRequest(
     string? Code, string? Name, string? BaseUrl, string? ApiKey, string[]? Models);
 
-public sealed record UpdateProviderRequest(string? Name, string? BaseUrl, bool? Enabled);
+public sealed record UpdateProviderRequest(string? Name, string? BaseUrl, bool? Enabled, string? ApiKey);
 
 public sealed record ApiKeyRequest(string? ApiKey);
 
@@ -72,7 +72,7 @@ public static class LlmEndpoints
             AgentCatalog catalog, ChatClientProvider chat, HttpContext http) =>
         {
             RequireProvider(store, code);
-            if (request.Name is null && request.BaseUrl is null && request.Enabled is null)
+            if (request.Name is null && request.BaseUrl is null && request.Enabled is null && request.ApiKey is null)
             {
                 throw ApiException.Validation("没有需要更新的字段");
             }
@@ -83,7 +83,7 @@ public static class LlmEndpoints
                 throw ApiException.Validation("Base URL 必须是 http/https 绝对地址");
             }
 
-            store.UpdateProvider(code, request.Name, request.BaseUrl, request.Enabled);
+            store.UpdateProvider(code, request.Name, request.BaseUrl, request.Enabled, request.ApiKey);
             return Snapshot(store, catalog, chat, http);
         });
 

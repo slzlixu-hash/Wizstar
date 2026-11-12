@@ -217,7 +217,6 @@
         models: (Array.isArray(p.models) ? p.models : []).map(function (m) {
           return { id: m.id, name: m.name || m.id };
         }),
-        primaryAction: '配置 API Key',
         secondaryAction: '编辑供应商',
       };
     });

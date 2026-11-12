@@ -333,7 +333,6 @@
             { id: 'deepseek-chat', name: 'deepseek-chat' },
             { id: 'deepseek-reasoner', name: 'deepseek-reasoner（R1）' },
           ],
-          primaryAction: '配置 API Key',
           secondaryAction: '编辑供应商',
         },
       ],

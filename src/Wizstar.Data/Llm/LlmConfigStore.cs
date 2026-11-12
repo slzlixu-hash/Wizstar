@@ -160,12 +160,27 @@ public sealed class LlmConfigStore(
         return provider;
     }
 
-    public LlmProvider UpdateProvider(string code, string? name, string? baseUrl, bool? enabled)
+    public LlmProvider UpdateProvider(string code, string? name, string? baseUrl, bool? enabled, string? apiKey)
     {
         var provider = FindProvider(code) ?? throw new InvalidOperationException($"供应商不存在: {code}");
         if (!string.IsNullOrWhiteSpace(name)) provider.DisplayName = name.Trim();
         if (!string.IsNullOrWhiteSpace(baseUrl)) provider.BaseUrl = baseUrl.Trim().TrimEnd('/');
         if (enabled.HasValue) provider.Enabled = enabled.Value;
+        // apiKey 不传（null）= 保留已保存 Key；传空串 = 清除；传值 = 加密保存。
+        if (apiKey is not null)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                provider.ApiKeyCipher = null!;
+                provider.ApiKeyHint = null;
+            }
+            else
+            {
+                var plain = apiKey.Trim();
+                provider.ApiKeyCipher = ApiKeyProtector.Protect(plain, masterKey);
+                provider.ApiKeyHint = ApiKeyProtector.Hint(plain);
+            }
+        }
         provider.UpdatedAt = DateTime.Now;
         db.Updateable(provider).ExecuteCommand();
         return provider;
