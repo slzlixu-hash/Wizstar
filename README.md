@@ -3,8 +3,19 @@
 对旧项目 `D:\WorkCode\AgentWorkBench` 的干净重写。本期目标是可编译、可运行、可验证的
 MAF（Microsoft Agent Framework）基础框架 + MCP「即插即用」，后续阶段在此之上迭代。
 
-技术栈：.NET 10（net10.0）+ Microsoft.Agents.AI 1.26 + SQLite（幂等账本）+ YamlDotNet。
-本期**不依赖 MySQL**（业务库留业务接入阶段），开箱即跑。
+技术栈：.NET 10（net10.0）+ Microsoft.Agents.AI 1.26 + SqlSugarCore（MySQL 业务库）+ SQLite（幂等账本）+ YamlDotNet。
+MySQL 的连接串在 `src/Wizstar.Api/appsettings.json` 的 `Database:MySql`；启动时 CodeFirst 自动建库建表，连不上只降级告警、不阻塞启动。
+
+### 数据库结构
+
+- `src/Wizstar.Data`：SqlSugar 持久层实体，`wiz_agent_session` / `wiz_approval` / `wiz_operation_ledger` 由启动时 CodeFirst 同步。
+- `db/migrations/V1__agentworkbench_schema.sql`：完整业务库 DDL（6 大域 23 张表，规范 v2.0），全部 `CREATE TABLE IF NOT EXISTS`，可重复执行。首次部署执行：
+
+```bash
+mysql -uroot -p --default-character-set=utf8mb4 Wizstar < db/migrations/V1__agentworkbench_schema.sql
+```
+
+> 业务表含 `JSON` / `VARBINARY` / 外键等原生结构，按 DDL 脚本管理；`wiz_*` 三张运行态表由 SqlSugar CodeFirst 管理，两者互不影响。
 
 ## 目录结构
 
