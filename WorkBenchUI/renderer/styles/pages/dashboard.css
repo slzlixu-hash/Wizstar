@@ -40,6 +40,15 @@
    同时保证无头截图（hidden 窗口首帧）不会拍到 opacity:0 的中间帧。 */
 .page-body > .dash-page {
   animation: none;
+  /* 工作台信息密度高，整页平铺一屏：压缩卡片间距，并让下方分栏撑满剩余高度，
+     避免出现纵向滚动条、也避免底部留一大片空白。 */
+  gap: 14px;
+  min-height: 100%;
+}
+
+/* 工作台一屏铺满：页脚留白比其它页小 */
+.main:has(.dash-page) .page-body {
+  padding-bottom: 16px;
 }
 
 /* ============================== 4 张 KPI 卡 ============================== */
@@ -50,8 +59,8 @@
 .dash-kpi {
   display: flex;
   flex-direction: column;
-  min-height: 154px;
-  padding: 20px 22px;
+  min-height: 108px;
+  padding: 13px 18px 14px;
   overflow: hidden;
 }
 
@@ -71,7 +80,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  min-height: 30px;
+  min-height: 22px;
 }
 
 .dash-kpi-label {
@@ -103,7 +112,7 @@
   align-items: baseline;
   gap: 5px;
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: 2px;
   white-space: nowrap;
 }
 
@@ -145,7 +154,7 @@
 .dash-kpi-meta {
   position: relative;
   z-index: 1;
-  margin-top: 10px;
+  margin-top: 5px;
   font-size: 11.5px;
   color: var(--text-3);
   white-space: nowrap;
@@ -188,8 +197,8 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 176px;
-  padding: 20px 26px;
+  min-height: 132px;
+  padding: 14px 24px;
   overflow: hidden;
 }
 
@@ -261,7 +270,7 @@
   color: #e8eefb;
 }
 
-/* 各阶段色调 */
+/* 各阶段色板 */
 .dash-stage--amber {
   border-color: rgba(251, 191, 36, 0.55);
   background:
@@ -407,8 +416,11 @@
 .dash-split {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .dash-card-head {
@@ -441,8 +453,23 @@
 }
 
 .dash-task-table {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
+  min-height: 0;
+}
+
+/* 表格撑满卡片剩余高度：额外高度平摊到各行，避免底部出现大片空白 */
+.dash-task-table .table-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.dash-task-table .data-table {
+  height: 100%;
 }
 
 .dash-tasks .data-table {
@@ -455,7 +482,7 @@
 }
 
 .dash-tasks .data-table td {
-  padding: 9px 10px;
+  padding: 7px 10px;
   font-size: 12.5px;
 }
 
@@ -570,8 +597,11 @@
 .dash-agent-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 10px;
 }
 
 .dash-agent {
@@ -579,7 +609,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 10px 11px;
+  padding: 7px 9px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: linear-gradient(178deg, rgba(22, 32, 54, 0.72), rgba(12, 20, 36, 0.7));
@@ -698,7 +728,7 @@
 
 .dash-auto {
   margin-top: auto;
-  height: 46px;
+  height: 42px;
   border-radius: 13px;
   font-size: 15px;
   letter-spacing: 0.03em;
@@ -720,8 +750,15 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 窄窗口：左右分栏改单列自然流式排布，不再撑满一屏（允许页面滚动） */
+  .page-body > .dash-page {
+    min-height: 0;
+  }
+
   .dash-split {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    flex: 0 0 auto;
   }
 
   .dash-flow {
