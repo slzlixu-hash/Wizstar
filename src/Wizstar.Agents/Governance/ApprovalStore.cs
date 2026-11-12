@@ -33,7 +33,7 @@ public interface IApprovalStore
 {
     ApprovalRequest Create(ApprovalRequest request);
 
-    ApprovalRequest? Get(Guid id);
+    ApprovalRequest? GetById(Guid id);
 
     ApprovalRequest? FindPendingOrDecided(string serverId, string toolName, string operationId, string argsDigest);
 
@@ -72,7 +72,7 @@ public sealed class InMemoryApprovalStore(int maxEntries = 500) : IApprovalStore
         return request;
     }
 
-    public ApprovalRequest? Get(Guid id)
+    public ApprovalRequest? GetById(Guid id)
     {
         lock (_lock)
         {

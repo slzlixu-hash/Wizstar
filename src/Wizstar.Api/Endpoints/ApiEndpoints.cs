@@ -116,7 +116,7 @@ public static class ApprovalEndpoints
 
         group.MapGet("/{id:guid}", (IApprovalStore store, Guid id) =>
         {
-            var approval = store.Get(id);
+            var approval = store.GetById(id);
             return approval is null
                 ? Results.NotFound(ApiEnvelope<object>.Fail(ErrorCodes.ValidationError, $"审批单不存在: {id}", string.Empty))
                 : Results.Ok(ApiEnvelope<object>.Ok(approval, string.Empty));
