@@ -17,6 +17,18 @@ mysql -uroot -p --default-character-set=utf8mb4 Wizstar < db/migrations/V1__agen
 
 > 业务表含 `JSON` / `VARBINARY` / 外键等原生结构，按 DDL 脚本管理；`wiz_*` 三张运行态表由 SqlSugar CodeFirst 管理，两者互不影响。
 
+**业务表实体（DbFirst 反向生成）**：`src/Wizstar.Data/Entities/Business/` 下 23 个 `partial class`，
+由 `tools/Wizstar.DbFirstGen` 从库结构生成（PascalCase 类名/属性 + `[SugarTable]` / `[SugarColumn(ColumnName=...)]` 显式列名）。
+
+```bash
+dotnet run --project tools/Wizstar.DbFirstGen              # 重建全部业务实体
+dotnet run --project tools/Wizstar.DbFirstGen -- --smoke   # 重建 + 插入/查询/删除冒烟验证
+```
+
+约定：MySQL `JSON` 列统一映射为 `string`（原始 JSON 文本，业务侧用 `System.Text.Json` 解析）；
+`VARBINARY` → `byte[]`；`TINYINT(1)` → `bool`。生成文件为 nullable-oblivious，顶部带 `#nullable disable`。
+表结构变更后重跑生成器即可（会自动排除 `wiz_*` 运行态表）。
+
 ## 目录结构
 
 ```
