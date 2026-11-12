@@ -147,12 +147,14 @@ ui.bind(root, selector, event, handler)            // 批量绑定
 ### settings —— `ref-01-settings.jpg`
 - 页头：标题 `系统设置`；右上角依次：`+ 新增模型供应商`（主按钮）、「默认全局模型：deepseek-chat (V3)」下拉、`保存更改`（主按钮）。
 - Tab 行：`模型与 API Key 设置`（激活，青色下划线）/ `全局业务风控` / `环境与网络配置`，右侧「+ 添加自定义供应商 (OpenAI / 阿里通义 / 硅基流动)」链接。三个 tab 必须能切换，各自有内容。
-- 模型与 API Key：
-  - 供应商卡 2 张 + 1 张虚线「添加自定义供应商」卡（3 列）：DeepSeek（已启用绿徽标、Base URL、API Key `sk-****7a9c` 带眼睛/铅笔图标、支持模型 chip `deepseek-chat` `deepseek-reasoner (R1)`、底部「编辑供应商」+「配置 API Key」）；Ollama（免密就绪、Base URL、API Key 无（本地调用）、模型 chip、底部「探测本地服务」）。数据 `WB.data.settings.providers`。
-  - 下方「Agent 默认模型映射分派表」卡：说明小字 + 6 行，每行左 `指挥官 Agent（Commander）`，右 `-> 摆渡的模型:` + 下拉（deepseek-chat 等）。数据 `modelMapping` / `modelOptions`。
+- 模型与 API Key（A2 起接真实 `/api/llm/*`，失败回退演示数据）：
+  - 供应商卡：内置 DeepSeek 1 张 + 用户自建供应商 N 张 + 1 张虚线「添加自定义供应商」卡（3 列）。**本机私有化部署不在支持范围**。每卡保留：名称 + 状态徽标、Base URL、API Key（掩码 + 眼睛/铅笔图标）、支持模型 chip + 「管理」入口、底部「编辑供应商」+「配置 API Key」。数据 `WB.data.settings.providers`。
+  - 「内置」以标签（badge）形式显示在名称旁，文字只用「内置」，不再写「内置种子」；内置模型只有 DeepSeek，内置卡**不显示删除按钮**。非内置（用户自建）卡额外显示「删除供应商」按钮。
+  - 「支持模型」管理入口：卡内 chip 行右侧的「管理」按钮 + 页头「支持模型」按钮，打开同一管理弹窗，可添加 / 删除模型定义。
+  - 下方「Agent 默认模型映射分派表」卡：说明小字 + 6 行，每行左 `指挥官 Agent（Commander）`，右 `-> 摆渡的模型:` + 下拉（deepseek-chat 等），点「保存更改」提交。数据 `modelMapping` / `modelOptions`。
 - 全局业务风控 tab：4 个风险等级卡（L1 只读 / L2 写入 / L3 敏感写入 / L4 不可逆，`riskPolicy`），每卡标题 + 等级 badge + 描述 + 「自动执行 / 需人工审批」开关；再加一条说明「服务端不自动批准 HITL」。开关切换 → toast。
 - 环境与网络配置 tab：环境信息 kv 列表（`environment`）+ 4 个 toggle 行（`toggles`，用 `ui.switchControl`）+ 「测试连通性」按钮（toast）。
-- 交互：tab 切换、保存更改 → toast + 按钮 loading、「探测本地服务」→ toast（延误 600ms 模拟）、眼睛切换 API Key 明文/掩码、编辑/配置 → modal 占位。
+- 交互：tab 切换、保存更改 → 提交 Agent 分派 + 默认模型、眼睛切换 API Key 明文/掩码（真实明文经 IPC 取回）、编辑/配置 → modal 提交后端、新增/删除供应商、支持模型管理、默认全局模型下拉。后端不可用时全部交互降级为演示 toast，不产生 `console.error`。
 
 ### login —— `ref-02-login.jpg`
 - 独立窗口 `renderer/login.html`（1180×720，无侧边栏），自带标题栏：左上小 Logo + `AgentWorkBench`，右侧只有「最小化 / 关闭」两个自绘按钮（用 `window.workbench.minimize()/close()`）。

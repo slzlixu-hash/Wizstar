@@ -892,6 +892,142 @@
   border-top-color: var(--cyan-bright);
 }
 
+/* ---------------------------- A2：内置标签 / 支持模型管理 ---------------------------- */
+.set-provider-builtin {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 8px;
+  transform: translateY(-2px);
+}
+
+.set-provider-foot {
+  flex-wrap: wrap;
+}
+
+.set-frow--models dd {
+  align-items: flex-start;
+}
+
+.set-model-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.set-model-manage {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  border-radius: 7px;
+  background: rgba(34, 211, 238, 0.07);
+  color: var(--cyan-text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.set-model-manage:hover,
+.set-model-manage:focus-visible {
+  outline: none;
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(34, 211, 238, 0.14);
+  color: var(--cyan-bright);
+}
+
+.set-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.set-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 13px;
+  border: 1px solid rgba(124, 160, 214, 0.14);
+  border-radius: 9px;
+  background: rgba(9, 15, 28, 0.55);
+}
+
+.set-model-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+.set-model-id {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.set-model-del {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.set-model-del:hover,
+.set-model-del:focus-visible {
+  outline: none;
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.14);
+}
+
+.set-model-empty {
+  padding: 18px;
+  border: 1px dashed rgba(124, 160, 214, 0.22);
+  border-radius: 9px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.set-model-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.set-model-add .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.set-model-add .btn {
+  flex: none;
+}
+
 /* ---------------------------- 窄窗口降级 ---------------------------- */
 @media (max-width: 1320px) {
   .set-providers {

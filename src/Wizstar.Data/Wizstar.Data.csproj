@@ -13,4 +13,8 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Wizstar.Contracts\Wizstar.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>

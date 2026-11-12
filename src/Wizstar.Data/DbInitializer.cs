@@ -14,6 +14,7 @@ public static class DbInitializer
         typeof(AgentSessionRecord),
         typeof(ApprovalRecord),
         typeof(OperationRecord),
+        typeof(LlmAgentBindingRecord),
     ];
 
     /// <summary>用默认连接串直接初始化（供命令行 / 测试使用）。</summary>
@@ -27,15 +28,23 @@ public static class DbInitializer
         log?.Invoke($"SqlSugar CodeFirst 完成：{string.Join(", ", EntityTypes.Select(t => t.Name))}");
     }
 
-    /// <summary>构建标准 SqlSugar 客户端（MySQL，自动关闭连接）。</summary>
-    public static SqlSugarClient CreateClient(string connectionString)
+    /// <summary>标准连接配置（MySQL，自动关闭连接）。</summary>
+    private static ConnectionConfig BuildConfig(string connectionString) => new()
     {
-        return new SqlSugarClient(new ConnectionConfig
-        {
-            ConnectionString = connectionString,
-            DbType = DbType.MySql,
-            IsAutoCloseConnection = true,
-            InitKeyType = InitKeyType.Attribute,
-        });
-    }
+        ConnectionString = connectionString,
+        DbType = DbType.MySql,
+        IsAutoCloseConnection = true,
+        InitKeyType = InitKeyType.Attribute,
+    };
+
+    /// <summary>构建标准 SqlSugar 客户端（供命令行 / 一次性初始化使用）。</summary>
+    public static SqlSugarClient CreateClient(string connectionString) =>
+        new SqlSugarClient(BuildConfig(connectionString));
+
+    /// <summary>
+    /// 构建线程安全客户端：注册成 Singleton 供多个 HTTP 请求共享时必须用 SqlSugarScope，
+    /// 否则并发查询会抛 "This MySqlConnection is already in use"（A2 并行预取实测踩到）。
+    /// </summary>
+    public static ISqlSugarClient CreateScopeClient(string connectionString) =>
+        new SqlSugarScope(BuildConfig(connectionString));
 }

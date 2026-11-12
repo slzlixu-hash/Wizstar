@@ -361,7 +361,7 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统操作员账号表';
 
 CREATE TABLE IF NOT EXISTS `llm_provider` (
-  `provider_code` VARCHAR(32) NOT NULL COMMENT 'deepseek|ollama|custom_xxx',
+  `provider_code` VARCHAR(32) NOT NULL COMMENT 'deepseek|custom_xxx（仅公网 OpenAI 兼容 API）',
   `display_name` VARCHAR(64) NOT NULL,
   `base_url` VARCHAR(255) NOT NULL,
   `api_key_cipher` VARBINARY(512) DEFAULT NULL COMMENT 'AES-256-GCM 密文',

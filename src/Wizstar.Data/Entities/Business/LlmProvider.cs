@@ -17,7 +17,7 @@ namespace Wizstar.Data.Entities.Business
 
            }
            /// <summary>
-           /// Desc:deepseek|ollama|custom_xxx
+           /// Desc:deepseek|custom_xxx（仅公网 OpenAI 兼容 API）
            /// Default:
            /// Nullable:False
            /// </summary>           

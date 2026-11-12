@@ -17,8 +17,8 @@
       endpoint: '127.0.0.1:5210',
       user: { name: '陈墨', role: '超级管理员', initial: '陈' },
       globalModel: 'deepseek-chat',
-      globalModelLabel: '默认全局模型：deepseek-chat (V3)',
-      globalModels: ['deepseek-chat (V3)', 'deepseek-reasoner (R1)', 'qwen2.5:7b', 'llama3:latest'],
+      globalModelLabel: '默认全局模型：deepseek-chat',
+      globalModels: ['deepseek-chat', 'deepseek-reasoner'],
     },
 
     /* ---------------- 6 位 Agent ---------------- */
@@ -322,28 +322,19 @@
         {
           id: 'deepseek',
           name: 'DeepSeek 深度求索',
-          seed: '内置种子',
+          builtin: true,
           badge: { text: '已启用', tone: 'green', dot: true },
           enabled: true,
-          baseUrl: 'https://api.deepseek.com',
+          baseUrl: 'https://api.deepseek.com/v1',
           apiKey: 'sk-****7a9c',
-          keyNote: '编辑后需保存并重新握手',
-          models: ['deepseek-chat', 'deepseek-reasoner（R1）'],
+          hasKey: true,
+          keyNote: '密文落库，仅在主动查看时取回明文',
+          models: [
+            { id: 'deepseek-chat', name: 'deepseek-chat' },
+            { id: 'deepseek-reasoner', name: 'deepseek-reasoner（R1）' },
+          ],
           primaryAction: '配置 API Key',
           secondaryAction: '编辑供应商',
-        },
-        {
-          id: 'ollama',
-          name: 'Ollama 本地私有化',
-          seed: '内置种子',
-          badge: { text: '免密就绪', tone: 'green', dot: true },
-          enabled: true,
-          baseUrl: 'http://127.0.0.1:11434',
-          apiKey: '无（本地调用）',
-          keyNote: '本机服务，无需密钥',
-          models: ['qwen2.5:7b', 'llama3:latest'],
-          primaryAction: '探测本地服务',
-          secondaryAction: null,
         },
       ],
       modelMapping: [
@@ -354,7 +345,7 @@
         { agentId: 'publisher', label: '投放发布官 Agent（Publisher）', model: 'deepseek-chat' },
         { agentId: 'analyst', label: '分析 Agent（Analyst）', model: 'deepseek-reasoner' },
       ],
-      modelOptions: ['deepseek-chat', 'deepseek-reasoner', 'qwen2.5:7b', 'llama3:latest'],
+      modelOptions: ['deepseek-chat', 'deepseek-reasoner'],
       riskPolicy: [
         {
           id: 'read',

@@ -21,12 +21,52 @@
 
   const API_ENDPOINT = '127.0.0.1:5301';
   const BOOTSTRAP_PATH = '/api/ui/bootstrap';
+  const LLM_SETTINGS_PATH = '/api/llm/settings';
+
+  // 演示分派表快照：真实名册只有 2 个 Agent，按「真实覆盖 + 保留演示」口径，
+  // 每次刷新都以这 6 行为基底覆盖真实行，避免界面元素被真实数据越刷越少。
+  const DEMO_MAPPING = (data && data.settings && Array.isArray(data.settings.modelMapping))
+    ? data.settings.modelMapping.map(function (r) { return Object.assign({}, r); })
+    : [];
 
   // ① 同步修正：login.js / app.js 在本文件之后加载，能直接读到正确端口
   if (data && data.app) {
     data.app.endpoint = API_ENDPOINT;
     data.app.source = 'demo';
   }
+
+  /* ------------------------------ 通用请求层（A2） ------------------------------ */
+  /**
+   * 统一读写通道。返回 { ok, data?, error? }；任何失败都收敛成 demo 降级信号，
+   * 不 reject、不产生 console.error（截图验收把 console 错误视为失败）。
+   */
+  WB.api = {
+    available: function () {
+      return !!(bridge && typeof bridge.apiRequest === 'function');
+    },
+    // 复用同一套适配：写操作返回的快照可直接刷新设置页，无需二次 GET。
+    applyLlm: function (snapshot) { applyLlmSettings(snapshot); },
+    request: async function (method, path, body) {
+      if (!bridge || typeof bridge.apiRequest !== 'function') {
+        return { ok: false, status: 0, error: 'API 未连接', demo: true };
+      }
+      try {
+        const res = await bridge.apiRequest(method, path, body === undefined ? null : body);
+        if (!res || !res.ok || !res.body || res.body.success !== true) {
+          const envelopeError = res && res.body && res.body.error && res.body.error.message;
+          return {
+            ok: false,
+            status: (res && res.status) || 0,
+            error: envelopeError || (res && res.error) || '请求失败',
+            demo: true,
+          };
+        }
+        return { ok: true, data: res.body.data, status: res.status };
+      } catch (_) {
+        return { ok: false, status: 0, error: 'API 未连接', demo: true };
+      }
+    },
+  };
 
   /* ------------------------------ 界面标记 ------------------------------ */
 
@@ -150,6 +190,72 @@
     if (snapshot.mcp) applyMcpSnapshot(snapshot.mcp);
   }
 
+  /**
+   * 系统设置 → 模型与 API Key：真实配置覆盖 WB.data.settings 的对应字段（A2）。
+   * 口径与 A1 一致：真实覆盖 + 保留演示（此处为整体字段替换，风控 / 环境 tab 仍是演示数据）。
+   */
+  function applyLlmSettings(snapshot) {
+    if (!data || !data.settings || !snapshot) return;
+    const S = data.settings;
+
+    S.providers = (Array.isArray(snapshot.providers) ? snapshot.providers : []).map(function (p) {
+      const ready = !!p.enabled && !!p.hasKey;
+      return {
+        id: p.code,
+        name: p.name,
+        builtin: !!p.isSeed,
+        badge: {
+          text: !p.enabled ? '已停用' : ready ? '已启用' : '待配置 Key',
+          tone: ready ? 'green' : 'amber',
+          dot: ready,
+        },
+        enabled: !!p.enabled,
+        baseUrl: p.baseUrl || '',
+        apiKey: p.apiKeyHint || '未配置',
+        hasKey: !!p.hasKey,
+        keyNote: '密文落库，仅在主动查看时取回明文',
+        models: (Array.isArray(p.models) ? p.models : []).map(function (m) {
+          return { id: m.id, name: m.name || m.id };
+        }),
+        primaryAction: '配置 API Key',
+        secondaryAction: '编辑供应商',
+      };
+    });
+
+    S.modelOptions = Array.isArray(snapshot.modelOptions) ? snapshot.modelOptions.slice() : [];
+    const realBindings = Array.isArray(snapshot.bindings) ? snapshot.bindings : [];
+    S.modelMapping = DEMO_MAPPING.map(function (row) {
+      const real = realBindings.find(function (b) { return b.agentId === row.agentId; });
+      if (!real) return Object.assign({}, row);
+      return {
+        agentId: row.agentId,
+        label: real.label || row.label,
+        model: real.model || snapshot.defaultModel || row.model,
+        live: true,
+      };
+    });
+    // 真实名册里出现、演示数据没有的 Agent 追加到末尾（不删任何演示行）。
+    realBindings.forEach(function (b) {
+      if (!S.modelMapping.some(function (r) { return r.agentId === b.agentId; })) {
+        S.modelMapping.push({
+          agentId: b.agentId,
+          label: b.label || b.agentId,
+          model: b.model || snapshot.defaultModel || (S.modelOptions[0] || ''),
+          live: true,
+        });
+      }
+    });
+
+    if (data.app) {
+      data.app.globalModels = S.modelOptions.slice();
+      data.app.globalModel = snapshot.defaultModel || (S.modelOptions[0] || data.app.globalModel);
+      data.app.globalModelLabel = '默认全局模型：' + data.app.globalModel;
+    }
+
+    data.llm = snapshot;
+    data.llmSource = 'live';
+  }
+
   /* ------------------------------ 重渲染 ------------------------------ */
 
   function refresh() {
@@ -167,26 +273,58 @@
   function start() {
     if (!bridge || typeof bridge.apiGet !== 'function') {
       markDemo();
+      if (data) data.llmSource = 'demo';
       return;
     }
 
-    Promise.resolve()
-      .then(function () { return bridge.apiGet(BOOTSTRAP_PATH); })
-      .then(function (res) {
-        const env = res && res.ok ? res.body : null;
-        if (!env || env.success !== true || !env.data) {
-          markDemo();
-          return;
+    // A1 bootstrap 与 A2 LLM 配置并行预取，都结束后再统一重渲染，避免设置页先渲染 mock 再被覆盖。
+    Promise.all([
+      Promise.resolve()
+        .then(function () { return bridge.apiGet(BOOTSTRAP_PATH); })
+        .catch(function () { return null; }),
+      Promise.resolve()
+        .then(function () { return WB.api.request('GET', LLM_SETTINGS_PATH); })
+        .catch(function () { return { ok: false }; }),
+    ])
+      .then(function (results) {
+        const bootstrapRes = results[0];
+        const llmRes = results[1];
+        let bootstrapLive = false;
+
+        const env = bootstrapRes && bootstrapRes.ok ? bootstrapRes.body : null;
+        if (env && env.success === true && env.data) {
+          try {
+            applyBootstrap(env.data);
+            bootstrapLive = true;
+          } catch (_) {
+            bootstrapLive = false;
+          }
         }
-        try {
-          applyBootstrap(env.data);
-          markLive();
-          refresh();
-        } catch (_) {
-          markDemo();
+
+        if (llmRes && llmRes.ok) {
+          try {
+            applyLlmSettings(llmRes.data);
+            if (data) data.llmError = null;
+          } catch (err) {
+            if (data) {
+              data.llmSource = 'demo';
+              data.llmError = String((err && err.message) || err);
+            }
+          }
+        } else if (data) {
+          data.llmSource = 'demo';
+          data.llmError = llmRes ? llmRes.error || '请求失败' : '无响应';
         }
+
+        if (bootstrapLive) markLive();
+        else markDemo();
+
+        if (bootstrapLive || (llmRes && llmRes.ok)) refresh();
       })
-      .catch(function () { markDemo(); });
+      .catch(function () {
+        markDemo();
+        if (data) data.llmSource = 'demo';
+      });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

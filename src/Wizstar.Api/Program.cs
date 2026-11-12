@@ -9,6 +9,7 @@ using Wizstar.Api.Middleware;
 using Wizstar.Api.Endpoints;
 using Wizstar.Contracts;
 using Wizstar.Data;
+using Wizstar.Data.Llm;
 using SqlSugar;
 using Wizstar.Mcp;
 
@@ -106,7 +107,21 @@ if (string.IsNullOrWhiteSpace(mySqlConnectionString))
 {
     throw new InvalidOperationException("缺少 Database:MySql 连接串配置（appsettings.json）");
 }
-builder.Services.AddSingleton<SqlSugarClient>(_ => DbInitializer.CreateClient(mySqlConnectionString));
+// SqlSugarClient 单例在并发请求下会复用同一 MySqlConnection；改用 SqlSugarScope 隔离连接。
+builder.Services.AddSingleton<ISqlSugarClient>(_ => DbInitializer.CreateScopeClient(mySqlConnectionString));
+
+// ── LLM 动态配置：系统设置页写入 → 运行时热切 live/offline ──────────────────────
+// 主密钥留空时由 ApiKeyProtector 派生本机开发值；生产环境用 WIZSTAR_MASTER_KEY 注入。
+builder.Services.AddSingleton(_ => new LlmRuntimeDefaults(
+    builder.Configuration.GetValue("LLM:Temperature", 0.7),
+    builder.Configuration.GetValue("LLM:MaxOutputTokens", 2048),
+    builder.Configuration.GetValue("LLM:TimeoutSeconds", 120)));
+builder.Services.AddSingleton(sp => new LlmConfigStore(
+    sp.GetRequiredService<ISqlSugarClient>(),
+    builder.Configuration["Security:MasterKey"],
+    sp.GetRequiredService<LlmRuntimeDefaults>(),
+    msg => sp.GetRequiredService<ILogger<LlmConfigStore>>().LogWarning("{Message}", msg)));
+builder.Services.AddSingleton<ILlmRuntimeSettingsProvider>(sp => sp.GetRequiredService<LlmConfigStore>());
 
 var app = builder.Build();
 
@@ -119,6 +134,7 @@ app.MapApprovalEndpoints();
 app.MapMcpEndpoints();
 app.MapOperationsEndpoints();
 app.MapUiEndpoints();
+app.MapLlmEndpoints();
 
 // ── 健康检查（含账本自检；失败 503，不阻塞其余端点）────────────────────────────
 app.MapGet("/api/health", async (OperationLedger ledger, ChatClientProvider chat, AgentCatalog catalog, McpCatalog mcp, CancellationToken ct) =>
@@ -176,6 +192,18 @@ if (builder.Configuration.GetValue("Database:AutoCreateTables", true))
     {
         logger.LogWarning(ex, "MySQL 初始化失败（连接串或服务状态问题），持久化能力降级");
     }
+}
+
+// 种子逐项补缺：内置 DeepSeek + 两条模型定义 + 6 个 Agent 分派。
+// 单独兜底：配置库异常不影响后续账本 / MCP 启动，ChatClientProvider 会自动回退 offline。
+try
+{
+    app.Services.GetRequiredService<LlmConfigStore>().EnsureSeed();
+    logger.LogInformation("LLM 配置种子就绪: 内置供应商 / 支持模型 / Agent 分派");
+}
+catch (Exception ex)
+{
+    logger.LogWarning(ex, "LLM 配置种子初始化失败，动态模型配置暂不可用");
 }
 
 try
