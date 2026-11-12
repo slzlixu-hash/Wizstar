@@ -2,6 +2,7 @@
   <Project Path="src/Wizstar.Contracts/Wizstar.Contracts.csproj" />
   <Project Path="src/Wizstar.Agents/Wizstar.Agents.csproj" />
   <Project Path="src/Wizstar.Mcp/Wizstar.Mcp.csproj" />
+  <Project Path="src/Wizstar.Data/Wizstar.Data.csproj" />
   <Project Path="src/Wizstar.Api/Wizstar.Api.csproj" />
   <Project Path="tests/Wizstar.Tests/Wizstar.Tests.csproj" />
 </Solution>

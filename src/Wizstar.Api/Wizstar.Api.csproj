@@ -7,13 +7,14 @@
   </PropertyGroup>
 
   <!--
-    本期唯一后端 WebAPI：无 MySQL 依赖（业务库留业务接入阶段），
+    本期后端 WebAPI：SqlSugar + 本地 MySQL（Wizstar 库，CodeFirst），
     幂等账本用内嵌 SQLite（规范 §4.2），MCP 接入走声明式清单 + 即插即用。
   -->
   <ItemGroup>
     <ProjectReference Include="..\Wizstar.Contracts\Wizstar.Contracts.csproj" />
     <ProjectReference Include="..\Wizstar.Agents\Wizstar.Agents.csproj" />
     <ProjectReference Include="..\Wizstar.Mcp\Wizstar.Mcp.csproj" />
+    <ProjectReference Include="..\Wizstar.Data\Wizstar.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>

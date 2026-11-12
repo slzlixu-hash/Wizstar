@@ -8,6 +8,8 @@ using Wizstar.Agents.Tools;
 using Wizstar.Api.Middleware;
 using Wizstar.Api.Endpoints;
 using Wizstar.Contracts;
+using Wizstar.Data;
+using SqlSugar;
 using Wizstar.Mcp;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -98,6 +100,14 @@ builder.Services.AddSingleton<McpCatalog>();
 builder.Services.AddSingleton<McpReconciler>();
 builder.Services.AddHostedService<McpHealthMonitor>();
 
+// ── 持久层：SqlSugar + 本地 MySQL（Wizstar 库，CodeFirst）────────────────────
+var mySqlConnectionString = builder.Configuration["Database:MySql"] ?? string.Empty;
+if (string.IsNullOrWhiteSpace(mySqlConnectionString))
+{
+    throw new InvalidOperationException("缺少 Database:MySql 连接串配置（appsettings.json）");
+}
+builder.Services.AddSingleton<SqlSugarClient>(_ => DbInitializer.CreateClient(mySqlConnectionString));
+
 var app = builder.Build();
 
 // 顺序：CORS 最外层（错误响应也带 CORS 头）→ 异常统一 → 端点
@@ -153,6 +163,19 @@ var catalogInstance = app.Services.GetRequiredService<AgentCatalog>();
 logger.LogInformation("Agent 名册就绪: {Count} 个 Agent ({Names})",
     catalogInstance.GetAll().Count,
     string.Join(", ", catalogInstance.GetAll().Select(p => p.Key)));
+
+if (builder.Configuration.GetValue("Database:AutoCreateTables", true))
+{
+    try
+    {
+        DbInitializer.Initialize(mySqlConnectionString, msg => logger.LogInformation("{Message}", msg));
+        logger.LogInformation("MySQL 就绪: Wizstar 库（SqlSugar CodeFirst）");
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "MySQL 初始化失败（连接串或服务状态问题），持久化能力降级");
+    }
+}
 
 try
 {
