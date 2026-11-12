@@ -11,8 +11,9 @@
  *     风控 / 环境两个 Tab 仍为本地演示数据（本期不做业务表写入）。
  *
  * 保留原有全部元素：页头操作区、三个 Tab、供应商卡内 Base URL / API Key（掩码回显）/
- * 支持模型 chips / 底部按钮、Agent 分派表、虚线添加卡、添加自定义供应商链接。
+ * 支持模型 chips / 底部按钮（编辑供应商 + 管理 + 删除）、Agent 分派表、虚线添加卡、添加自定义供应商链接。
  * 单独「配置 API Key」按钮已取消，API Key 录入合并进「编辑供应商」弹框（留空=不修改）。
+ * 「支持模型」管理入口从模型 chip 行移入卡片底部，与「编辑供应商」并排；「内置」标签与「已启用」状态标签平排于卡头右侧。
  */
 (function () {
   const WB = window.WB;
@@ -141,6 +142,16 @@
         })
       );
     }
+    /* 支持模型管理入口：与「编辑供应商」并排，不再放在模型 chip 行内。 */
+    buttons.push(
+      ui.btn({
+        label: '管理',
+        icon: 'layers',
+        tone: 'outline',
+        size: 'sm',
+        attrs: `data-set-models="${esc(provider.id)}"`,
+      })
+    );
     /* 内置（DeepSeek）不可删除；用户自建供应商提供删除入口。 */
     if (!builtin) {
       buttons.push(
@@ -156,11 +167,14 @@
 
     return `<section class="card set-provider" data-provider="${esc(provider.id)}">
       <div class="set-provider-head">
-        <h3 class="set-provider-name">${esc(provider.name)}${builtinTag}</h3>
-        <span class="set-provider-badge">${ui.badge(provider.badge.text, {
-          tone: provider.badge.tone,
-          dot: provider.badge.dot,
-        })}</span>
+        <h3 class="set-provider-name">${esc(provider.name)}</h3>
+        <span class="set-provider-tags">
+          ${builtinTag}
+          <span class="set-provider-badge">${ui.badge(provider.badge.text, {
+            tone: provider.badge.tone,
+            dot: provider.badge.dot,
+          })}</span>
+        </span>
       </div>
       <dl class="set-fields">
         <div class="set-frow">
@@ -177,9 +191,6 @@
             <div class="set-model-chips">${models
               .map((model) => `<span class="set-chip">${esc(model.name)}</span>`)
               .join('')}</div>
-            <button type="button" class="set-model-manage" data-set-models="${esc(provider.id)}" title="管理该供应商的支持模型">
-              ${ui.icon('layers', 13)}<span>管理</span>
-            </button>
           </dd>
         </div>
       </dl>
