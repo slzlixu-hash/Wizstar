@@ -9,7 +9,7 @@
  *
  * 窗口控制、登录/退出窗口切换走 IPC；业务数据通过下面的 IPC 代理只读拉取
  * 本地 Wizstar.Api（渲染进程 sandbox:true，不直接发起网络请求）。
- * API 不可用时渲染层自动回退演示数据，不影响界面启动。
+ * API 不可用时渲染层进入离线重试页（无演示回退），不影响界面启动。
  */
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
@@ -132,7 +132,7 @@ ipcMain.on('win:close', (event) => windowFromEvent(event)?.close());
 // 127.0.0.1 白名单 + /api/ 前缀校验 + 2.5s 超时，失败只返回结果、不抛异常。
 registerApiProxy(ipcMain);
 
-/** 登录 → 打开主窗口并关闭登录窗口（A1：账号密码仍为演示模式，不接鉴权）。 */
+/** 登录 → 打开主窗口并关闭登录窗口（本期为本地会话，不接 sys_user 鉴权）。 */
 ipcMain.on('auth:login', () => {
   createMainWindow();
   if (loginWindow) {

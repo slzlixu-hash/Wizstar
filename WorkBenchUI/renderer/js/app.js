@@ -114,6 +114,18 @@
 
     document.title = `AgentWorkBench · ${page.title || '运营控制台'}`;
 
+    // 数据层只有三种状态：loading / live / offline。非 live 时不渲染业务数据，
+    // 避免出现「接口没返回但界面像有数据」的假象（无演示兜底）。
+    const source = (data.app && data.app.source) || 'loading';
+    if (source === 'offline') {
+      renderOffline(page);
+      return;
+    }
+    if (source === 'loading') {
+      renderLoading(page);
+      return;
+    }
+
     headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">${page.title || ''}</h1>${
       page.subtitle ? `<div class="page-subtitle">${page.subtitle}</div>` : ''
     }</div></div>${page.actions ? `<div class="page-actions">${page.actions}</div>` : ''}`;
@@ -150,6 +162,52 @@
     bodyEl.querySelectorAll(':scope > *').forEach((el, i) => {
       el.style.animationDelay = `${Math.min(i * 45, 260)}ms`;
     });
+  }
+
+  /* ------------------------------ 全局状态页 ------------------------------ */
+
+  /** 后端不可用：整站显示明确错误 + 重试，不展示任何本地伪造数据。 */
+  function renderOffline(page) {
+    const reason = (data.app && data.app.error) || '后端服务未响应';
+    const endpoint = (data.app && data.app.endpoint) || '127.0.0.1:5301';
+
+    headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">本地服务未连接</h1><div class="page-subtitle">${ui.esc(
+      page.title || ''
+    )}暂不可用</div></div></div>`;
+
+    bodyEl.innerHTML = `<div class="empty">
+      <div class="empty-icon">${WB.icon('alert', 26)}</div>
+      <div class="empty-title">无法连接 Wizstar.Api</div>
+      <div class="empty-desc">${ui.esc(reason)}</div>
+      <div class="empty-desc">请确认本地 API 已启动（默认 <code>http://${ui.esc(endpoint)}</code>），然后点击重试。</div>
+      <div style="margin-top:18px">${ui.btn({
+        label: '重试连接',
+        tone: 'primary',
+        icon: 'refresh',
+        attrs: 'data-api-retry',
+      })}</div>
+    </div>`;
+
+    const retry = bodyEl.querySelector('[data-api-retry]');
+    if (retry) {
+      retry.addEventListener('click', () => {
+        retry.disabled = true;
+        retry.innerHTML = '<span class="spinner"></span><span>连接中…</span>';
+        if (WB.api && typeof WB.api.reload === 'function') {
+          WB.api.reload().then(render);
+        }
+      });
+    }
+  }
+
+  /** 首次加载中：显示占位，不渲染空表格造成「无数据」误解。 */
+  function renderLoading(page) {
+    headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">${page.title || ''}</h1></div></div>`;
+    bodyEl.innerHTML = `<div class="empty">
+      <div class="empty-icon"><span class="spinner"></span></div>
+      <div class="empty-title">正在加载真实数据…</div>
+      <div class="empty-desc">从本地 API 读取 Agent 名册、MCP 服务与业务数据。</div>
+    </div>`;
   }
 
   /* ------------------------------ 全局委托 ------------------------------ */

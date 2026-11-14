@@ -10,7 +10,12 @@ namespace Wizstar.Mcp;
 /// </summary>
 public sealed class McpReconciler(McpCatalog catalog, ILogger<McpReconciler> logger)
 {
-    public async Task<McpReconcileSummary> ReconcileAsync(CancellationToken ct = default)
+    /// <param name="ct">取消令牌。</param>
+    /// <param name="handshake">
+    /// 是否对新增 / 变更服务执行握手。<c>false</c> 时仅登记清单、不建立连接，
+    /// 用于「启动自动握手 MCP 服务」开关关闭的场景（界面仍能看到已登记服务）。
+    /// </param>
+    public async Task<McpReconcileSummary> ReconcileAsync(CancellationToken ct = default, bool handshake = true)
     {
         catalog.ReloadIfChanged();
 
@@ -25,12 +30,31 @@ public sealed class McpReconciler(McpCatalog catalog, ILogger<McpReconciler> log
         {
             var config = catalog.GetConfig(id)!;
             var state = catalog.GetOrAddState(config);
+
             var isNew = state.State == McpServiceState.Connecting && state.ConnectedAt is null;
             var fingerprintChanged = !string.Equals(state.ConfigFingerprint, config.Fingerprint(), StringComparison.Ordinal)
                                      && state.ConnectedAt is not null;
 
             if (!isNew && !fingerprintChanged)
             {
+                continue;
+            }
+
+            // 全局总闸：toggle.auto-handshake。关闭时一律不握手，仅登记清单。
+            if (!handshake)
+            {
+                if (isNew) catalog.SetOffline(id, "全局自动握手已关闭，可手动连接");
+                notes.Add($"服务 {id} 已登记，全局自动握手已关闭");
+                continue;
+            }
+
+            // 服务级开关：autoStart。只在「首次登记」时生效——
+            // 配置指纹变化说明该服务此前已连过，属运行期重配，不受 autoStart 约束，
+            // 否则手动连上的服务会在下一次对账时被误踢下线。
+            if (isNew && !config.AutoStart)
+            {
+                catalog.SetOffline(id, "未开启启动时自动握手，可手动连接");
+                notes.Add($"服务 {id} 已登记，未开启启动时自动握手");
                 continue;
             }
 
@@ -81,6 +105,10 @@ public sealed class McpReconciler(McpCatalog catalog, ILogger<McpReconciler> log
         {
             return false;
         }
+
+        // 管理界面新建的服务还没有状态槽（未经对账循环）：先补缺，否则
+        // SetConnected / SetError 会静默丢状态，快照查不到该服务。
+        catalog.GetOrAddState(config);
 
         if (!string.Equals(config.Transport, "http", StringComparison.OrdinalIgnoreCase))
         {

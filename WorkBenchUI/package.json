@@ -3,7 +3,7 @@
   "productName": "AgentWorkBench",
   "version": "1.9.0",
   "private": true,
-  "description": "AgentWorkBench 智多星 · 电商智能体协同平台（Electron 桌面端界面，纯 UI 演示，不接业务逻辑与数据接口）",
+  "description": "AgentWorkBench 智多星 · 电商智能体协同平台（Electron 桌面控制台，数据全部来自本机 Wizstar.Api，无演示回退）",
   "main": "electron/main.js",
   "author": "Wizstar",
   "license": "MIT",

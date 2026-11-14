@@ -219,7 +219,7 @@
     overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
       <div class="modal-title">${o.title || ''}</div>
       ${o.desc ? `<div class="modal-desc">${o.desc}</div>` : ''}
-      ${o.body ? `<div class="mt-16">${o.body}</div>` : ''}
+      ${o.body ? `<div class="modal-body mt-16">${o.body}</div>` : ''}
       <div class="modal-foot">${
         o.actions ||
         btn({ label: '关闭', tone: 'ghost', attrs: 'data-modal-close' })

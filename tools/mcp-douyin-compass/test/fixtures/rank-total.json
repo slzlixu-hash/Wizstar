@@ -1,0 +1,34 @@
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "data_result": [
+      {
+        "product_info": {
+          "product_id": "3610000000001",
+          "title": "冬季加厚保暖外套 男",
+          "image_url": "https://p3-aio.ecombdimg.com/obj/xxx-1.jpg",
+          "price_min": 12900,
+          "price_max": 25900
+        },
+        "new_pay_amt": { "index_values": { "extra_value": { "lower": { "value": 1200000 }, "upper": { "value": 3600000 } } } },
+        "product_click_cnt": { "index_values": { "extra_value": { "lower": { "value": 5000 }, "upper": { "value": 25000 } } } },
+        "pay_combo_cnt": { "index_values": { "extra_value": { "lower": { "value": 120 }, "upper": { "value": 900 } } } },
+        "product_click_pay_cnt_ratio": { "index_values": { "extra_value": { "lower": { "value": 2.5 }, "upper": { "value": 7.5 } } } }
+      },
+      {
+        "product_info": {
+          "product_id": "3610000000002",
+          "title": "轻量羽绒服 女短款",
+          "image_url": "https://p3-aio.ecombdimg.com/obj/xxx-2.jpg",
+          "price": 39900
+        },
+        "new_pay_amt": { "index_values": { "extra_value": { "lower": { "value": 50000000 }, "upper": { "value": 120000000 } } } },
+        "product_click_cnt": { "index_values": { "extra_value": { "lower": { "value": 200000 }, "upper": { "value": 800000 } } } },
+        "pay_combo_cnt": { "index_values": { "extra_value": { "lower": { "value": 20000 }, "upper": { "value": 50000 } } } },
+        "product_click_pay_cnt_ratio": { "index_values": { "extra_value": { "lower": { "value": 0.05 }, "upper": { "value": 0.12 } } } }
+      }
+    ],
+    "page_result": { "total": 2, "page_no": 1 }
+  }
+}

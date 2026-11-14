@@ -1,0 +1,16 @@
+{
+  "code": 0,
+  "data": {
+    "cate_list": [
+      {
+        "cate_id": "1",
+        "cate_name": "服饰内衣",
+        "children": [
+          { "cate_id": "1-1", "cate_name": "女装" },
+          { "cate_id": "1-2", "cate_name": "男装" }
+        ]
+      },
+      { "cate_id": "2", "cate_name": "食品饮料" }
+    ]
+  }
+}

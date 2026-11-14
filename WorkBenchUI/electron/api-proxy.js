@@ -11,6 +11,36 @@
  */
 
 const API_BASE = process.env.WIZSTAR_API_BASE || 'http://127.0.0.1:5301';
+
+// 本机常驻 HTTP_PROXY（如 127.0.0.1:55109）。Node 全局 fetch（undici）会默认把
+// 127.0.0.1 的请求也转给该代理，导致本地回环被转成绝对地址（404 / 串服务），
+// 与 Wizstar.Api 端的 LoopbackBypassProxy 是同一个坑。这里让发往本地后端的请求直连，
+// 否则渲染层预取 /api/ui/bootstrap、/api/llm/settings 必然失败 → 整页降级为演示。
+(function ensureLocalBypassProxy() {
+  try {
+    const u = new URL(API_BASE);
+    const host = u.hostname;
+    const isLocal =
+      host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
+    if (!isLocal) return;
+    ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy'].forEach((k) => {
+      delete process.env[k];
+    });
+    const existing = process.env.NO_PROXY || process.env.no_proxy || '';
+    const set = new Set(
+      existing
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    ['127.0.0.1', 'localhost', '[::1]'].forEach((h) => set.add(h));
+    process.env.NO_PROXY = Array.from(set).join(',');
+    process.env.no_proxy = process.env.NO_PROXY;
+  } catch (_) {
+    /* API_BASE 非法也不影响主流程 */
+  }
+})();
+
 const API_TIMEOUT_MS = 2500;
 const API_WRITE_TIMEOUT_MS = 12000;
 const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE'];

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Wizstar 罗盘选品探针",
+  "version": "1.0.0",
+  "description": "抖店电商罗盘选品的轻量探针：仅回传响应体，绝不回传 Cookie / 凭证；配合本地 mcp-douyin-compass 服务使用。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://compass.jinritemai.com/*",
+    "http://127.0.0.1:5206/*"
+  ],
+  "background": {
+    "service_worker": "sw.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://compass.jinritemai.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://compass.jinritemai.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ]
+}

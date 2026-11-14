@@ -1,10 +1,20 @@
 {
   "mcpServers": {
-    "mcp-demo": {
-      "name": "演示服务（本地）",
+    "mcp-douyin-compass": {
+      "name": "抖店罗盘选品（本地）",
       "transport": "http",
-      "url": "http://127.0.0.1:5307",
-      "autoStart": false
+      "authType": "none",
+      "builtin": true,
+      "autoStart": true,
+      "url": "http://127.0.0.1:5206"
+    },
+    "1688-mcp": {
+      "name": "1688",
+      "transport": "http",
+      "authType": "none",
+      "builtin": true,
+      "autoStart": true,
+      "url": "http://127.0.0.1:5207/"
     }
   }
 }

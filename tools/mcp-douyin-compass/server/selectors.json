@@ -1,0 +1,255 @@
+{
+  "version": "1.0.0",
+  "site": "https://compass.jinritemai.com",
+  "allowedHosts": [
+    "compass.jinritemai.com"
+  ],
+  "note": "规则与选择器的单一数据源。改本文件即可热更新，无需重发 MV3 扩展；探针每次任务前从 GET /selectors.json 拉取。",
+  "rankRules": [
+    {
+      "id": "rank_total",
+      "rankType": "总榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/product/product_rank/market_hot_sale"
+      },
+      "responsePath": "data.data_result",
+      "metrics": [
+        "new_pay_amt",
+        "product_click_cnt",
+        "pay_combo_cnt",
+        "product_click_pay_cnt_ratio"
+      ],
+      "endpoint": "/compass_api/shop/product/product_rank/market_hot_sale"
+    },
+    {
+      "id": "rank_search",
+      "rankType": "搜索榜",
+      "match": {
+        "urlRegex": "^https://compass\\.jinritemai\\.com/(?:compass_api|compass_app)/shop/mall/product_rank/search(?:\\?|$)"
+      },
+      "responsePath": "data.module_data.search_product_rank.compass_general_table_value.data",
+      "metrics": [
+        "search_show_ucnt",
+        "pay_amt"
+      ],
+      "endpoint": "/compass_api/shop/mall/product_rank/search"
+    },
+    {
+      "id": "rank_live",
+      "rankType": "直播榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/product/product_rank/live_product"
+      },
+      "responsePath": "data.data_result",
+      "metrics": [
+        "pay_amt",
+        "product_click_cnt",
+        "pay_combo_cnt",
+        "live_room_cnt"
+      ],
+      "endpoint": "/compass_api/shop/product/product_rank/live_product"
+    },
+    {
+      "id": "rank_card",
+      "rankType": "商品卡榜",
+      "match": {
+        "urlRegex": "^https://compass\\.jinritemai\\.com/(?:compass_api|compass_app)/shop/mall/product_rank/product_card_hot_v2(?:\\?|$)"
+      },
+      "responsePath": "data.card_list",
+      "metrics": [
+        "pay_amt",
+        "product_click_cnt",
+        "click_pay_rate",
+        "pay_combo_cnt"
+      ],
+      "endpoint": "/compass_api/shop/mall/product_rank/product_card_hot_v2"
+    },
+    {
+      "id": "rank_author",
+      "rankType": "达人带货榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/product/product_rank/author_bring_good"
+      },
+      "responsePath": "data.data_result",
+      "metrics": [
+        "pay_amt",
+        "product_click_cnt",
+        "pay_combo_cnt",
+        "author_cnt"
+      ],
+      "endpoint": "/compass_api/shop/product/product_rank/author_bring_good"
+    },
+    {
+      "id": "rank_video",
+      "rankType": "短视频榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/product/product_rank/video_bring_good"
+      },
+      "responsePath": "data.data_result",
+      "metrics": [
+        "pay_amt",
+        "product_click_cnt",
+        "pay_combo_cnt",
+        "video_cnt"
+      ],
+      "endpoint": "/compass_api/shop/product/product_rank/video_bring_good"
+    },
+    {
+      "id": "rank_realtime",
+      "rankType": "实时爆品挖掘榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/product/product_rank/realtime_hot_dig"
+      },
+      "responsePaths": [
+        "data.data_result",
+        "data.list",
+        "data.product_list",
+        "data.card_list",
+        "data.cards",
+        "data.module_data.realtime_hot_dig.compass_general_table_value.data",
+        "data.module_data.product_rank.compass_general_table_value.data"
+      ],
+      "metrics": [],
+      "note": "实时榜无二级筛选字段；仅解析 price/title/image_url",
+      "endpoint": "/compass_api/shop/product/product_rank/realtime_hot_dig"
+    },
+    {
+      "id": "rank_refund_after_buy",
+      "rankType": "退后购买榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/trade/refund_analyse_v2/rank_list",
+        "query": {
+          "rank_type": "3"
+        }
+      },
+      "responsePaths": [
+        "data.module_data.GetRefundRankList.compass_general_table_value.data",
+        "data.refund_rank_list"
+      ],
+      "metrics": [
+        "loss_ucnt",
+        "refund_amt_rate",
+        "refund_amt",
+        "pay_amt"
+      ],
+      "endpoint": "/compass_api/shop/trade/refund_analyse_v2/rank_list",
+      "endpointQuery": {
+        "rank_type": "3"
+      }
+    },
+    {
+      "id": "rank_peer_low_refund",
+      "rankType": "同行低退榜",
+      "match": {
+        "url": "https://compass.jinritemai.com/compass_api/shop/trade/refund_analyse_v2/rank_list",
+        "query": {
+          "rank_type": "2"
+        }
+      },
+      "responsePath": "data.module_data.GetRefundRankList.compass_general_table_value.data",
+      "metrics": [
+        "refund_amt_rate",
+        "refund_amt",
+        "pay_amt"
+      ],
+      "endpoint": "/compass_api/shop/trade/refund_analyse_v2/rank_list",
+      "endpointQuery": {
+        "rank_type": "2"
+      }
+    }
+  ],
+  "searchAnalysis": {
+    "dateRange": {
+      "url": "https://compass.jinritemai.com/compass_api/config_center/data_range_v2",
+      "query": {
+        "data_type": "search_operation_word_rank",
+        "path": "/shop/search/drainage-terms"
+      },
+      "responsePath": "data.data_range_map",
+      "note": "取 data_range_map[dateType].max_date（Unix 秒），按 UTC+8 折算；23→30 天，其它→7 天"
+    },
+    "wordRank": {
+      "url": "https://compass.jinritemai.com/compass_api/shop/mall/search_analysis/industry_words/compass_rank_v3",
+      "method": "GET",
+      "pageSize": 10,
+      "responsePath": "data.module_data.info_list.compass_general_table_value.data",
+      "totalPath": "page_result.total",
+      "wordPath": "cell_info.query.value.value_str",
+      "queryTemplate": {
+        "search_intent": "",
+        "sort_field": "",
+        "is_asc": "false",
+        "activity_id": "",
+        "is_activity": "false",
+        "industry_id": "",
+        "cate_id": "",
+        "category_id": "",
+        "total_cate_id": "",
+        "date_type": "",
+        "begin_date": "",
+        "end_date": "",
+        "page_no": "1",
+        "page_size": "10",
+        "rank_type": "",
+        "index_selected": ""
+      }
+    },
+    "wordProducts": {
+      "url": "https://compass.jinritemai.com/compass_api/shop/mall/search_analysis/word/industry_detail_list_v2",
+      "method": "GET",
+      "pageSize": 20,
+      "responsePath": "data.module_data.info_list.compass_general_table_value.data",
+      "totalPath": "page_result.total",
+      "productPath": "cell_info.product.product",
+      "queryTemplate": {
+        "query": "",
+        "list_type": "",
+        "rank_type": "",
+        "index_selected": "",
+        "sort_field": "product_show_ucnt",
+        "page_no": "1",
+        "page_size": "20"
+      },
+      "note": "指标统一从 cell_info.<metric>.value.index_values.extra_value 取 lower/upper；price 用 avg_price_min/100"
+    }
+  },
+  "category": {
+    "urlContains": "/compass_api/config_center/category/cate_list",
+    "responsePath": "data.cate_list",
+    "note": "按 type=CATEGORY_DATA 单独分流，绝不写入其它 storage 键（修原版 storage.category 被覆盖的 Bug）"
+  },
+  "dom": {
+    "excludeContainers": [
+      "#__wizstar_compass__"
+    ],
+    "tabButtons": ".aurora-tabs-tab-btn, .ecom-tabs-tab-btn, [role=tab]",
+    "tabActive": ".aurora-tabs-tab-active, .aurora-tabs-tab-btn[role=\"tab\"][aria-selected=\"true\"]",
+    "pagination": ".aurora-pagination, .ecom-pagination",
+    "paginationTotal": ".aurora-pagination-total-text, .ecom-pagination-total-text",
+    "paginationActive": ".aurora-pagination-item-active, .ecom-pagination-item-active",
+    "paginationNext": "button.aurora-pagination-item-link, button.ecom-pagination-item-link",
+    "realtimeScroller": ".aurora-infinite-scroller",
+    "realtimeRow": ".aurora-infinite-scroller > .aurora-spin-nested-loading > .aurora-spin-container > div",
+    "productName": "[class*=\"product-name\"], [class*=\"name-\"], [class*=\"title-\"]",
+    "productImage": "img",
+    "rankIndex": "[class*=\"rank-\"] span",
+    "table": "table",
+    "tableHeader": "thead th, thead td, tr:first-child th, tr:first-child td",
+    "tableRow": "tbody tr",
+    "priceText": "[class*=\"price\"], .price, .gx-cloud__gold",
+    "note": "DOM 仅用于补全真实价格（区间价拆 min/suggested）与翻页读数；主体数据一律来自 API 响应体"
+  },
+  "intercept": {
+    "queryParams": [
+      "industry_id",
+      "category_id",
+      "brand_type",
+      "price_bin",
+      "begin_date",
+      "end_date",
+      "page_no"
+    ],
+    "captureResponse": true,
+    "note": "query 覆盖/追加到页面自身请求；body 改写仅在本实现显式提供时生效（修原版 Request 对象 body 不改写的问题）"
+  }
+}

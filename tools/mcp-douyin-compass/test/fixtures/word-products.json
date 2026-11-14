@@ -1,0 +1,50 @@
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "module_data": {
+      "info_list": {
+        "compass_general_table_value": {
+          "data": [
+            {
+              "cell_info": {
+                "product": {
+                  "product": {
+                    "product_id": "3620000000001",
+                    "product_name": "加绒卫衣 情侣款",
+                    "product_image": "https://p3-aio.ecombdimg.com/obj/yyy-1.jpg",
+                    "detail_h5_url": "https://haohuo.jinritemai.com/views/product/detail?id=3620000000001"
+                  }
+                },
+                "avg_price": { "index_values": { "extra_value": { "lower": { "value": 8900 }, "upper": { "value": 12900 } } } },
+                "pay_amt": { "index_values": { "extra_value": { "lower": { "value": 900000 }, "upper": { "value": 2500000 } } } },
+                "pay_cnt": { "index_values": { "extra_value": { "lower": { "value": 100 }, "upper": { "value": 300 } } } },
+                "pay_ucnt": { "index_values": { "extra_value": { "lower": { "value": 90 }, "upper": { "value": 280 } } } },
+                "pay_per_usr_price": { "index_values": { "extra_value": { "lower": { "value": 8900 }, "upper": { "value": 12900 } } } },
+                "product_show_ucnt": { "index_values": { "extra_value": { "lower": { "value": 50000 }, "upper": { "value": 150000 } } } }
+              }
+            },
+            {
+              "cell_info": {
+                "product": {
+                  "product": {
+                    "product_id": "3620000000002",
+                    "product_name": "纯棉打底衫 秋冬",
+                    "product_image": "https://p3-aio.ecombdimg.com/obj/yyy-2.jpg"
+                  }
+                },
+                "avg_price": { "index_values": { "extra_value": { "lower": { "value": 3900 }, "upper": { "value": 3900 } } } },
+                "pay_amt": { "index_values": { "extra_value": { "lower": { "value": 100000 }, "upper": { "value": 300000 } } } },
+                "pay_cnt": { "index_values": { "extra_value": { "lower": { "value": 20 }, "upper": { "value": 60 } } } },
+                "pay_ucnt": { "index_values": { "extra_value": { "lower": { "value": 18 }, "upper": { "value": 55 } } } },
+                "pay_per_usr_price": { "index_values": { "extra_value": { "lower": { "value": 3900 }, "upper": { "value": 3900 } } } },
+                "product_show_ucnt": { "index_values": { "extra_value": { "lower": { "value": 5000 }, "upper": { "value": 20000 } } } }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "page_result": { "total": 2, "page_no": 1 }
+  }
+}

@@ -34,11 +34,15 @@ public sealed class ToolInvoker(
     IApprovalStore approvals,
     OperationLedger ledger,
     IConfiguration configuration,
-    ILogger<ToolInvoker> logger)
+    ILogger<ToolInvoker> logger,
+    IRiskPolicyProvider? riskPolicy = null)
 {
     /// <summary>write 风险执行模式：execute（默认）或 dryrun。</summary>
     public const string WriteModeExecute = "execute";
     public const string WriteModeDryRun = "dryrun";
+
+    /// <summary>执行策略来源：未注入时沿用默认口径（read/write 自动、irreversible 审批）。</summary>
+    private readonly IRiskPolicyProvider _riskPolicy = riskPolicy ?? new DefaultRiskPolicyProvider();
 
     public async Task<string> InvokeAsync(
         RegisteredTool tool,
@@ -98,8 +102,12 @@ public sealed class ToolInvoker(
                 }
             }
 
-            // ③ irreversible：强制 HITL（先查审批单，再决定挂起或执行）
-            if (RiskClassifier.RequiresApproval(risk))
+            // ③ 需人工审批的风险等级：强制 HITL（先查审批单，再决定挂起或执行）
+            //    策略来自 IRiskPolicyProvider：L1/L2 可配置自动执行。
+            //    纵深防御：irreversible 无论策略层返回什么，一律强制审批——
+            //    「服务端从不自动批准不可逆操作」是治理红线，不允许被配置绕开。
+            var forcedApproval = string.Equals(risk, RiskLevels.Irreversible, StringComparison.Ordinal);
+            if (forcedApproval || !_riskPolicy.IsAutoExecute(risk))
             {
                 var existing = approvals.FindPendingOrDecided(tool.Descriptor.ServerId, tool.Descriptor.Name, operationId, argsDigest);
                 if (existing is null)

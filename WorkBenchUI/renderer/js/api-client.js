@@ -1,18 +1,17 @@
 'use strict';
 
 /**
- * 前后端联调数据层（A1）。
+ * 前端数据层（唯一数据来源，**无演示回退**）。
  *
  * 职责：
  *  1. 同步修正 WB.data.app.endpoint，让随后加载的 login.js / app.js 拿到真实地址；
- *  2. DOMContentLoaded 后经 workbench.apiGet('/api/ui/bootstrap') 预取后端只读快照；
- *  3. 成功 → 拆统一信封 → 适配成 WB.data 现有形状 → 覆盖字段 → 触发重渲染；
- *  4. 失败 / 超时 / 无 Electron 桥接 → 完整保留 mock 演示数据，界面不白屏。
+ *  2. DOMContentLoaded 后并行拉取全部真实接口，一次性构建 WB.data；
+ *  3. 任一接口失败 → 该部分置空并记录错误，页面渲染真实空态 / 错误态；
+ *     bootstrap 失败视为后端不可用，整站进入离线态（带重试）；
+ *  4. 提供统一请求通道 WB.api.request，供页面写操作复用。
  *
- * 口径（见 WorkBenchUI/INTEGRATION.md）：真实数据覆盖对应字段，其余保留演示数据，
- * 由角标明确标注「部分演示数据」。mock-data.js 保持只读，不在本文件里被写入。
- *
- * 约束：本文件不产生 console.error（截图验收把 console 错误视为失败），不抛未捕获异常。
+ * 约束：不产生 console.error（截图验收把 console 错误视为失败），不抛未捕获异常，
+ * 不内置任何业务示例值——mock-data.js 已删除，`js/data.js` 只提供空骨架。
  */
 (function () {
   const WB = window.WB || (window.WB = {});
@@ -20,35 +19,36 @@
   const bridge = window.workbench || null;
 
   const API_ENDPOINT = '127.0.0.1:5301';
-  const BOOTSTRAP_PATH = '/api/ui/bootstrap';
-  const LLM_SETTINGS_PATH = '/api/llm/settings';
 
-  // 演示分派表快照：真实名册只有 2 个 Agent，按「真实覆盖 + 保留演示」口径，
-  // 每次刷新都以这 6 行为基底覆盖真实行，避免界面元素被真实数据越刷越少。
-  const DEMO_MAPPING = (data && data.settings && Array.isArray(data.settings.modelMapping))
-    ? data.settings.modelMapping.map(function (r) { return Object.assign({}, r); })
-    : [];
+  /* Agent 卡片配色：按名册顺序循环取色（纯视觉，不含业务语义）。 */
+  const TONES = ['green', 'cyan', 'violet', 'amber', 'rose', 'blue'];
 
-  // ① 同步修正：login.js / app.js 在本文件之后加载，能直接读到正确端口
+  const MCP_STATE_LABELS = {
+    connected: '在线',
+    connecting: '握手中',
+    offline: '离线',
+    error: '异常',
+    disabled: '已停用',
+  };
+
   if (data && data.app) {
     data.app.endpoint = API_ENDPOINT;
-    data.app.source = 'demo';
+    data.app.source = 'loading';
   }
 
-  /* ------------------------------ 通用请求层（A2） ------------------------------ */
+  /* ------------------------------ 请求层 ------------------------------ */
+
   /**
-   * 统一读写通道。返回 { ok, data?, error? }；任何失败都收敛成 demo 降级信号，
-   * 不 reject、不产生 console.error（截图验收把 console 错误视为失败）。
+   * 统一读写通道。返回 { ok, data?, error?, status? }；
+   * 任何异常都收敛成 { ok:false }，不 reject、不产生 console.error。
    */
   WB.api = {
     available: function () {
       return !!(bridge && typeof bridge.apiRequest === 'function');
     },
-    // 复用同一套适配：写操作返回的快照可直接刷新设置页，无需二次 GET。
-    applyLlm: function (snapshot) { applyLlmSettings(snapshot); },
     request: async function (method, path, body) {
       if (!bridge || typeof bridge.apiRequest !== 'function') {
-        return { ok: false, status: 0, error: 'API 未连接', demo: true };
+        return { ok: false, status: 0, error: 'API 未连接（Electron 桥接不可用）' };
       }
       try {
         const res = await bridge.apiRequest(method, path, body === undefined ? null : body);
@@ -58,17 +58,19 @@
             ok: false,
             status: (res && res.status) || 0,
             error: envelopeError || (res && res.error) || '请求失败',
-            demo: true,
           };
         }
         return { ok: true, data: res.body.data, status: res.status };
-      } catch (_) {
-        return { ok: false, status: 0, error: 'API 未连接', demo: true };
+      } catch (err) {
+        return { ok: false, status: 0, error: String((err && err.message) || err || 'API 未连接') };
       }
     },
+    applyLlm: function (snapshot) { applyLlmSettings(snapshot); },
+    /** 离线态重试：重新拉取全部数据并重渲染。 */
+    reload: function () { return loadAll(); },
   };
 
-  /* ------------------------------ 界面标记 ------------------------------ */
+  /* ------------------------------ 状态标记 ------------------------------ */
 
   function setBadge(text, tone) {
     const anchor = document.getElementById('sidebar-version') || document.getElementById('login-endpoint');
@@ -84,16 +86,17 @@
       anchor.parentNode.insertBefore(badge, anchor.nextSibling);
     }
     badge.textContent = text;
-    badge.style.color = tone === 'live' ? '#7ee2a8' : '#e5b567';
-    badge.style.background = tone === 'live' ? 'rgba(46,160,96,.16)' : 'rgba(220,160,60,.14)';
-    badge.style.border = '1px solid ' + (tone === 'live' ? 'rgba(46,160,96,.35)' : 'rgba(220,160,60,.30)');
+    badge.style.color = tone === 'live' ? '#7ee2a8' : tone === 'loading' ? '#9fb4cc' : '#e5b567';
+    badge.style.background =
+      tone === 'live' ? 'rgba(46,160,96,.16)' : tone === 'loading' ? 'rgba(120,150,180,.14)' : 'rgba(220,160,60,.14)';
+    badge.style.border =
+      '1px solid ' + (tone === 'live' ? 'rgba(46,160,96,.35)' : tone === 'loading' ? 'rgba(120,150,180,.30)' : 'rgba(220,160,60,.30)');
   }
 
   function setServiceStatus(online) {
     const dot = document.querySelector('.status-dot');
     if (dot) dot.className = 'status-dot ' + (online ? 'online' : 'offline');
 
-    // 登录页静态文案与状态灯保持一致（不改 HTML 结构）
     const label = document.querySelector('.login-service > span:not(.login-endpoint)');
     if (label) label.textContent = online ? '本地服务连接正常' : '本地服务离线';
 
@@ -103,97 +106,270 @@
     }
   }
 
-  function markDemo() {
-    if (data && data.app) data.app.source = 'demo';
-    setBadge('演示 · API 未连接', 'demo');
-    setServiceStatus(false);
+  /** 侧边栏运行模式文案：反映真实模型通道（chatMode），不再是静态「界面演示」。 */
+  function setSidebarMode(text) {
+    const el = document.getElementById('sidebar-mode');
+    if (el) el.textContent = text || '';
+  }
+
+  function markLoading() {
+    if (data && data.app) data.app.source = 'loading';
+    setBadge('加载中', 'loading');
+    setSidebarMode('连接中');
   }
 
   function markLive() {
-    if (data && data.app) data.app.source = 'live';
-    setBadge('实时 · 部分演示', 'live');
+    if (data && data.app) {
+      data.app.source = 'live';
+      data.app.error = null;
+    }
+    setBadge('实时', 'live');
     setServiceStatus(true);
-  }
+    setSidebarMode(data && data.chatMode === 'live' ? '模型在线' : '模型离线');
 
-  /* ------------------------------ 数据适配 ------------------------------ */
-
-  function applyAgentSnapshot(realAgents) {
-    const list = (data && Array.isArray(data.agents)) ? data.agents : [];
-    realAgents.forEach(function (real) {
-      const target = list.find(function (a) { return a.id === real.key; });
-      if (!target) return; // 不在演示名册里的真实 Agent 不新增，界面保持 6 卡布局
-
-      target.name = real.displayName || real.name || target.name;
-      target.desc = real.description || target.desc;
-      target.online = real.enabled !== false;
-      target.status = target.online ? '待命中' : '已停用';
-      target.dot = target.online ? 'online' : 'slate';
-      if (!target.online) target.tone = 'slate';
-      if (Array.isArray(real.allowedTools)) {
-        if (real.allowedTools.length) target.mcp = real.allowedTools.join(' · ');
-        target.rules = real.allowedTools.length;
-      }
-      target.live = true;
-    });
-  }
-
-  function applyMcpSnapshot(mcp) {
-    if (!data || !data.mcp) return;
-
-    const list = Array.isArray(data.mcp.servers) ? data.mcp.servers : [];
-    const template = list[0] || null; // 借演示卡作基底，保证页面所需字段齐全
-    const realServers = Array.isArray(mcp.servers) ? mcp.servers : [];
-    const realTools = Array.isArray(mcp.tools) ? mcp.tools : [];
-
-    realServers.forEach(function (rs) {
-      const online = rs.state === 'connected';
-      const toolCount = Number(rs.toolCount || rs.toolsCount) || 0;
-      const patch = {
-        id: rs.id || rs.serverId || 'unknown',
-        name: rs.name || rs.id || '未命名服务',
-        slug: rs.id || rs.serverId || 'unknown',
-        online: online,
-        transport: String(rs.transport || 'http').toUpperCase() + ' · 实时',
-        tools: online ? '已连接 · ' + toolCount + ' 个工具' : (rs.state || '离线'),
-        toolsCount: toolCount,
-        bind: '实时接入',
-        risk: '实时快照',
-        riskTone: online ? 'green' : 'amber',
-        health: online ? '正常' : (rs.lastError || rs.state || '离线'),
-        note: rs.serverName ? String(rs.serverName + ' ' + (rs.serverVersion || '')).trim() : '来自 /api/ui/bootstrap',
-        log: realTools.slice(0, 6).map(function (t) {
-          return [JSON.stringify({ name: t.name, serverId: t.serverId, risk: t.declaredRisk || t.risk })];
-        }),
-        live: true,
-      };
-
-      const idx = list.findIndex(function (s) { return s.id === patch.id || s.slug === patch.slug; });
-      if (idx >= 0) {
-        list[idx] = Object.assign({}, list[idx], patch);
-      } else {
-        // 真实服务置顶，其余演示卡保留（口径：真实覆盖 + 保留演示）
-        list.unshift(template ? Object.assign({}, template, patch) : patch);
-      }
-    });
-
-    if (Array.isArray(data.mcp.stats) && data.mcp.stats.length >= 2) {
-      data.mcp.stats[0].value = String(realServers.length);
-      data.mcp.stats[1].value = String(Number(mcp.connected) || 0);
+    // 登录页 / 侧边栏都在数据层异步完成前就已渲染（骨架里是占位「—」），
+    // 这里补一次真实版本号与端点，避免外壳静态文案停留在占位值。
+    const version = data && data.app && data.app.version;
+    if (version && version !== '—') {
+      const loginVersion = document.getElementById('login-version');
+      if (loginVersion) loginVersion.textContent = version;
+      const sidebarVersion = document.getElementById('sidebar-version');
+      if (sidebarVersion) sidebarVersion.textContent = version;
+    }
+    const endpoint = document.getElementById('sidebar-endpoint');
+    if (endpoint && data && data.app && data.app.endpoint) {
+      endpoint.textContent = data.app.endpoint;
     }
   }
 
-  function applyBootstrap(snapshot) {
-    if (!data || !snapshot) return;
-    data.bootstrap = snapshot;
-    if (snapshot.endpoint) data.app.endpoint = snapshot.endpoint;
-    if (Array.isArray(snapshot.agents)) applyAgentSnapshot(snapshot.agents);
-    if (snapshot.mcp) applyMcpSnapshot(snapshot.mcp);
+  function markOffline(reason) {
+    if (data && data.app) {
+      data.app.source = 'offline';
+      data.app.error = reason || '后端服务未连接';
+    }
+    setBadge('离线 · 后端未连接', 'offline');
+    setServiceStatus(false);
+    setSidebarMode('服务离线');
   }
 
-  /**
-   * 系统设置 → 模型与 API Key：真实配置覆盖 WB.data.settings 的对应字段（A2）。
-   * 口径与 A1 一致：真实覆盖 + 保留演示（此处为整体字段替换，风控 / 环境 tab 仍是演示数据）。
-   */
+  /* ------------------------------ 适配：Agent 名册 ------------------------------ */
+
+  function adaptAgents(list) {
+    return (Array.isArray(list) ? list : []).map(function (a, i) {
+      const key = String(a.key || a.Key || 'agent-' + i);
+      const tools = Array.isArray(a.allowedTools || a.AllowedTools) ? (a.allowedTools || a.AllowedTools) : [];
+      const enabled = a.enabled !== false && a.Enabled !== false;
+      const display = String(a.displayName || a.DisplayName || a.name || a.Name || key);
+      const en = String(a.name || a.Name || key);
+      // "*" 是通配授权：实际可见工具数取决于已连接的服务，静态不可知，界面单独表述
+      const wildcard = tools.includes('*');
+
+      return {
+        id: key,
+        name: display,
+        en: en.charAt(0).toUpperCase() + en.slice(1),
+        desc: String(a.description || a.Description || ''),
+        status: enabled ? '待命中' : '已停用',
+        tone: enabled ? TONES[i % TONES.length] : 'slate',
+        dot: enabled ? 'online' : 'slate',
+        mcp: wildcard
+          ? '全部工具（通配授权 *）'
+          : tools.length
+            ? tools.join(' · ')
+            : '未授权任何工具',
+        wildcard: wildcard,
+        rules: tools.length,
+        todayLabel: '最大步数',
+        today: Number(a.maxSteps || a.MaxSteps) || 0,
+        load: null,
+        online: enabled,
+        avatar: true,
+        photo: false,
+      };
+    });
+  }
+
+  /* ------------------------------ 适配：HITL 审批 → 工作台任务 ------------------------------ */
+
+  function adaptApprovals(list, agents) {
+    const nameOf = {};
+    (agents || []).forEach(function (a) { nameOf[a.id] = a.name; });
+
+    return (Array.isArray(list) ? list : []).map(function (a) {
+      const agentKey = String(a.agentKey || a.AgentKey || '');
+      const risk = String(a.risk || a.Risk || '');
+      const created = a.createdAt || a.CreatedAt;
+      const id = String(a.id || a.Id || '');
+      const time = created ? String(created).slice(11, 16) : '—';
+      const toolName = String(a.toolName || a.ToolName || '');
+
+      return {
+        id: id.slice(0, 8),
+        approvalId: id,
+        operationId: String(a.operationId || a.OperationId || ''),
+        source: nameOf[agentKey] || agentKey || '未知 Agent',
+        desc: '调用工具 ' + (toolName || '—') + '：' + (String(a.argumentsJson || a.ArgumentsJson || '{}').slice(0, 120)),
+        time: time,
+        type: risk === 'irreversible' ? '不可逆操作' : risk === 'write' ? '写操作' : '只读复核',
+        status: String(a.status || a.Status || 'pending'),
+      };
+    });
+  }
+
+  /* ------------------------------ 适配：MCP ------------------------------ */
+
+  function mcpStateLabel(state) {
+    return MCP_STATE_LABELS[String(state || '').toLowerCase()] || String(state || '未知状态');
+  }
+
+  function mcpToolsOf(tools, id) {
+    return (Array.isArray(tools) ? tools : []).filter(function (t) {
+      return String((t && (t.serverId || t.ServerId)) || '') === String(id);
+    });
+  }
+
+  /** 后端 McpServiceSnapshot + ToolDescriptor[] → MCP 页卡片形状。 */
+  function mcpCard(rs, tools) {
+    const id = String((rs && (rs.id || rs.Id)) || 'unknown');
+    const state = String((rs && (rs.state || rs.State)) || 'offline').toLowerCase();
+    const online = state === 'connected';
+    const own = mcpToolsOf(tools, id);
+    const toolCount = Number(rs && (rs.toolCount || rs.ToolCount)) || own.length;
+    const risky = own.some(function (t) {
+      const r = String((t && (t.declaredRisk || t.DeclaredRisk)) || '').toLowerCase();
+      return r === 'write' || r === 'irreversible';
+    });
+    const serverName = String((rs && (rs.serverName || rs.ServerName)) || '');
+    const serverVersion = String((rs && (rs.serverVersion || rs.ServerVersion)) || '');
+    const protocol = String((rs && (rs.protocolVersion || rs.ProtocolVersion)) || '');
+    const lastError = String((rs && (rs.lastError || rs.LastError)) || '');
+    const url = String((rs && (rs.url || rs.Url)) || '');
+    // 服务级启动握手开关：false 是有效值，不能用 || 兜底
+    const autoStart = !!(rs && (rs.autoStart !== undefined ? rs.autoStart : rs.AutoStart));
+    // HMAC 凭证：keyId 可回显，secret 只暴露「是否已配置」（明文永不下发）
+    const authKeyId = String((rs && (rs.authKeyId || rs.AuthKeyId)) || '');
+    const hasAuthSecret = !!(rs && (rs.hasAuthSecret !== undefined ? rs.hasAuthSecret : rs.HasAuthSecret));
+    // 四档鉴权模式：none / bearer / header / hmac
+    const authType = String((rs && (rs.authType || rs.AuthType)) || 'none').toLowerCase();
+    const authHeaderName = String((rs && (rs.authHeaderName || rs.AuthHeaderName)) || '');
+    // 内置/外部：清单 builtin 标记（内置可改不可删，外部全 CRUD）
+    const builtin = !!(rs && (rs.builtin !== undefined ? rs.builtin : rs.Builtin));
+
+    const meta = own.map(function (t) {
+      return {
+        name: String((t && (t.name || t.Name)) || ''),
+        risk: String((t && (t.declaredRisk || t.DeclaredRisk)) || ''),
+        description: String((t && (t.description || t.Description)) || ''),
+        schema: String((t && (t.inputSchemaJson || t.InputSchemaJson)) || ''),
+      };
+    }).filter(function (t) { return t.name; });
+
+    const logLines = ['{', '  "method": "tools/list",', '  "server": ' + JSON.stringify(id) + ',', '  "tools": ['];
+    meta.forEach(function (t, i) {
+      logLines.push('    ' + JSON.stringify({ name: t.name, risk: t.risk || null, description: t.description }) +
+        (i < meta.length - 1 ? ',' : ''));
+    });
+    logLines.push('  ]', '}');
+
+    return {
+      id: id,
+      name: String((rs && (rs.name || rs.Name)) || id),
+      slug: id,
+      url: url,
+      online: online,
+      state: state,
+      stateLabel: mcpStateLabel(state),
+      autoStart: autoStart,
+      authKeyId: authKeyId,
+      hasAuthSecret: hasAuthSecret,
+      authType: authType,
+      authHeaderName: authHeaderName,
+      authLabel: ({ none: '免鉴权', bearer: 'Bearer Key', header: '自定义 Header', hmac: 'MCP-HMAC' })[authType] || authType,
+      builtin: builtin,
+      transport: url || (String((rs && (rs.transport || rs.Transport)) || 'http').toUpperCase()),
+      transportType: state === 'disabled' ? 'pending' : 'http',
+      tools: online ? '已连接 · ' + toolCount + ' 个工具' : mcpStateLabel(state),
+      toolsCount: toolCount,
+      bind: serverName || '平台声明式注册',
+      risk: risky ? '含写操作 (HITL)' : '只读 (Read)',
+      riskTone: risky ? 'amber' : 'green',
+      health: lastError || (online ? '正常' : mcpStateLabel(state)),
+      note: [serverName, serverVersion, protocol].filter(Boolean).join(' · ') || '来自 /api/mcp/servers',
+      protocolVersion: protocol,
+      serverVersion: serverVersion,
+      connectedAt: (rs && (rs.connectedAt || rs.ConnectedAt)) || null,
+      toolsFetchedAt: (rs && (rs.toolsFetchedAt || rs.ToolsFetchedAt)) || null,
+      lastError: lastError,
+      toolsMeta: meta,
+      toolNames: meta.map(function (t) { return t.name; }),
+      log: logLines.map(function (line) { return [line]; }),
+      live: true,
+    };
+  }
+
+  /** 真实清单整体替换 + 重算 4 张统计卡。 */
+  function applyMcpLive(servers, tools) {
+    if (!data) return [];
+    const cards = (Array.isArray(servers) ? servers : []).map(function (rs) { return mcpCard(rs, tools); });
+    const connected = cards.filter(function (c) { return c.online; }).length;
+
+    data.mcp.servers = cards;
+    data.mcp.stats = [
+      { label: '已登记插件', value: String(cards.length), unit: '个', tone: 'cyan' },
+      { label: '握手在线', value: String(connected), unit: '个', tone: 'green' },
+      { label: '异常 / 待接入', value: String(cards.length - connected), unit: '个', tone: 'amber' },
+      { label: '可用工具', value: String((Array.isArray(tools) ? tools : []).length), unit: '个', tone: 'violet' },
+    ];
+    data.mcpSource = 'live';
+    return cards;
+  }
+
+  /** MCP 数据层（页面写操作复用）。 */
+  WB.api.mcp = {
+    isLive: function () {
+      return !!(data && data.app && data.app.source === 'live' && WB.api.available());
+    },
+    load: async function () {
+      const results = await Promise.all([
+        WB.api.request('GET', '/api/mcp/servers'),
+        WB.api.request('GET', '/api/mcp/tools'),
+      ]);
+      const sr = results[0];
+      const tr = results[1];
+      if (!sr.ok) return { ok: false, error: sr.error || '服务清单读取失败' };
+      return {
+        ok: true,
+        servers: Array.isArray(sr.data) ? sr.data : [],
+        tools: tr.ok && Array.isArray(tr.data) ? tr.data : [],
+        toolsOk: !!tr.ok,
+        toolsError: tr.ok ? null : (tr.error || '工具清单读取失败'),
+      };
+    },
+    reconcile: function () { return WB.api.request('POST', '/api/mcp/reconcile', {}); },
+    handshake: function (id) {
+      return WB.api.request('POST', '/api/mcp/servers/' + encodeURIComponent(id) + '/handshake', {});
+    },
+    create: function (body) { return WB.api.request('POST', '/api/mcp/servers', body); },
+    update: function (id, body) {
+      return WB.api.request('PUT', '/api/mcp/servers/' + encodeURIComponent(id), body);
+    },
+    remove: function (id) {
+      return WB.api.request('DELETE', '/api/mcp/servers/' + encodeURIComponent(id), null);
+    },
+    disconnect: function (id) {
+      return WB.api.request('POST', '/api/mcp/servers/' + encodeURIComponent(id) + '/disconnect', {});
+    },
+    callTool: function (body) { return WB.api.request('POST', '/api/mcp/tools/call', body); },
+    debugCurl: function (id, tool) {
+      const q = tool ? '?tool=' + encodeURIComponent(tool) : '';
+      return WB.api.request('GET', '/api/mcp/servers/' + encodeURIComponent(id) + '/debug-curl' + q);
+    },
+    apply: applyMcpLive,
+    label: mcpStateLabel,
+  };
+
+  /* ------------------------------ 适配：模型与 API Key ------------------------------ */
+
   function applyLlmSettings(snapshot) {
     if (!data || !data.settings || !snapshot) return;
     const S = data.settings;
@@ -222,43 +398,79 @@
     });
 
     S.modelOptions = Array.isArray(snapshot.modelOptions) ? snapshot.modelOptions.slice() : [];
-    const realBindings = Array.isArray(snapshot.bindings) ? snapshot.bindings : [];
-    S.modelMapping = DEMO_MAPPING.map(function (row) {
-      const real = realBindings.find(function (b) { return b.agentId === row.agentId; });
-      if (!real) return Object.assign({}, row);
+    S.modelMapping = (Array.isArray(snapshot.bindings) ? snapshot.bindings : []).map(function (b) {
       return {
-        agentId: row.agentId,
-        label: real.label || row.label,
-        model: real.model || snapshot.defaultModel || row.model,
+        agentId: b.agentId,
+        label: b.label || b.agentId,
+        model: b.model || snapshot.defaultModel || '',
         live: true,
       };
-    });
-    // 真实名册里出现、演示数据没有的 Agent 追加到末尾（不删任何演示行）。
-    realBindings.forEach(function (b) {
-      if (!S.modelMapping.some(function (r) { return r.agentId === b.agentId; })) {
-        S.modelMapping.push({
-          agentId: b.agentId,
-          label: b.label || b.agentId,
-          model: b.model || snapshot.defaultModel || (S.modelOptions[0] || ''),
-          live: true,
-        });
-      }
     });
 
     if (data.app) {
       data.app.globalModels = S.modelOptions.slice();
-      data.app.globalModel = snapshot.defaultModel || (S.modelOptions[0] || data.app.globalModel);
-      data.app.globalModelLabel = '默认全局模型：' + data.app.globalModel;
+      data.app.globalModel = snapshot.defaultModel || (S.modelOptions[0] || '');
+      data.app.globalModelLabel = data.app.globalModel ? '默认全局模型：' + data.app.globalModel : '';
     }
 
     data.llm = snapshot;
     data.llmSource = 'live';
+    data.llmError = null;
+  }
+
+  /* ------------------------------ 适配：业务域 ------------------------------ */
+
+  function applyBusiness(key, payload) {
+    if (!data || !data[key] || !payload) return;
+    data[key].stats = Array.isArray(payload.stats) ? payload.stats : [];
+    data[key].rows = Array.isArray(payload.rows) ? payload.rows : [];
+  }
+
+  /* ------------------------------ 适配：设置（风控 / 环境） ------------------------------ */
+
+  function applyRisk(payload) {
+    if (!data || !data.settings || !payload) return;
+    data.settings.riskPolicy = (Array.isArray(payload.riskPolicy) ? payload.riskPolicy : []).map(function (r) {
+      return {
+        id: r.id,
+        title: r.title,
+        level: r.level,
+        tone: r.tone,
+        desc: r.desc,
+        auto: !!r.auto,
+        locked: !!r.locked,
+      };
+    });
+    data.settingsSource = 'live';
+  }
+
+  function applyEnvironment(payload) {
+    if (!data || !data.settings || !payload) return;
+    data.settings.environment = Array.isArray(payload.environment) ? payload.environment : [];
+    data.settings.toggles = (Array.isArray(payload.toggles) ? payload.toggles : []).map(function (t) {
+      return { id: t.id, label: t.label, desc: t.desc, checked: !!t.checked, realTime: !!t.realTime };
+    });
+    data.settingsSource = 'live';
+  }
+
+  /* ------------------------------ 适配：工作台 ------------------------------ */
+
+  function applyDashboard(payload, agents, tasks) {
+    if (!data || !payload) return;
+    data.dashboard.kpis = Array.isArray(payload.kpis) ? payload.kpis : [];
+    data.dashboard.pipeline = Array.isArray(payload.pipeline) ? payload.pipeline : [];
+    data.dashboard.tasks = adaptApprovals(tasks, agents);
+  }
+
+  function applyTeamStats(payload) {
+    if (!data || !payload) return;
+    data.team.stats = Array.isArray(payload.stats) ? payload.stats : [];
   }
 
   /* ------------------------------ 重渲染 ------------------------------ */
 
   function refresh() {
-    if (!document.getElementById('page-body')) return; // 登录页无需重渲染
+    if (!document.getElementById('page-body')) return;
     if (typeof WB.go === 'function') {
       const id = (location.hash || '').replace(/^#\/?/, '').split('?')[0] || 'dashboard';
       WB.go(WB.pages && WB.pages[id] ? id : 'dashboard');
@@ -267,63 +479,122 @@
     }
   }
 
-  /* ------------------------------ 启动探测 ------------------------------ */
+  /* ------------------------------ 全量加载 ------------------------------ */
 
-  function start() {
-    if (!bridge || typeof bridge.apiGet !== 'function') {
-      markDemo();
-      if (data) data.llmSource = 'demo';
+  async function loadAll() {
+    if (!data) return;
+
+    if (!WB.api.available()) {
+      markOffline('Electron 桥接不可用（请通过桌面端启动）');
+      refresh();
       return;
     }
 
-    // A1 bootstrap 与 A2 LLM 配置并行预取，都结束后再统一重渲染，避免设置页先渲染 mock 再被覆盖。
-    Promise.all([
-      Promise.resolve()
-        .then(function () { return bridge.apiGet(BOOTSTRAP_PATH); })
-        .catch(function () { return null; }),
-      Promise.resolve()
-        .then(function () { return WB.api.request('GET', LLM_SETTINGS_PATH); })
-        .catch(function () { return { ok: false }; }),
-    ])
-      .then(function (results) {
-        const bootstrapRes = results[0];
-        const llmRes = results[1];
-        let bootstrapLive = false;
+    markLoading();
 
-        const env = bootstrapRes && bootstrapRes.ok ? bootstrapRes.body : null;
-        if (env && env.success === true && env.data) {
-          try {
-            applyBootstrap(env.data);
-            bootstrapLive = true;
-          } catch (_) {
-            bootstrapLive = false;
-          }
-        }
+    const req = WB.api.request;
+    const results = await Promise.all([
+      req('GET', '/api/ui/bootstrap'),
+      req('GET', '/api/llm/settings'),
+      req('GET', '/api/mcp/servers'),
+      req('GET', '/api/mcp/tools'),
+      req('GET', '/api/business/dashboard'),
+      req('GET', '/api/business/products'),
+      req('GET', '/api/business/orders'),
+      req('GET', '/api/business/shops'),
+      req('GET', '/api/settings/risk'),
+      req('GET', '/api/settings/environment'),
+      req('GET', '/api/agents/stats'),
+      req('GET', '/api/approvals?status=pending&limit=20'),
+    ]);
 
-        if (llmRes && llmRes.ok) {
-          try {
-            applyLlmSettings(llmRes.data);
-            if (data) data.llmError = null;
-          } catch (err) {
-            if (data) {
-              data.llmSource = 'demo';
-              data.llmError = String((err && err.message) || err);
-            }
-          }
-        } else if (data) {
-          data.llmSource = 'demo';
-          data.llmError = llmRes ? llmRes.error || '请求失败' : '无响应';
-        }
+    const boot = results[0];
 
-        if (bootstrapLive) markLive();
-        else markDemo();
+    // bootstrap 是唯一「后端可用」的判据：失败即整站离线，不展示任何伪造数据
+    if (!boot.ok || !boot.data) {
+      markOffline(boot.error || '/api/ui/bootstrap 无响应');
+      refresh();
+      return;
+    }
 
-        if (bootstrapLive || (llmRes && llmRes.ok)) refresh();
-      })
-      .catch(function () {
-        markDemo();
-        if (data) data.llmSource = 'demo';
-      });
+    data.bootstrap = boot.data;
+    if (boot.data.endpoint && data.app) data.app.endpoint = boot.data.endpoint;
+    if (boot.data.version && data.app) data.app.version = boot.data.version;
+
+    data.agents = adaptAgents(boot.data.agents);
+    const chatMode = String(boot.data.chatMode || 'offline');
+    data.chatMode = chatMode;
+    data.chatOfflineReason = boot.data.chatOfflineReason || null;
+
+    // 模型配置
+    const llm = results[1];
+    if (llm.ok) {
+      applyLlmSettings(llm.data);
+    } else {
+      data.llmSource = 'error';
+      data.llmError = llm.error || '模型配置读取失败';
+    }
+
+    // MCP
+    const mcpServers = results[2];
+    const mcpTools = results[3];
+    if (mcpServers.ok) {
+      applyMcpLive(mcpServers.data, mcpTools.ok ? mcpTools.data : []);
+    } else {
+      // 单端点失败：保留空清单并标记 error，页面据此显示「清单读取失败」，不伪装在线
+      data.mcp.servers = [];
+      data.mcp.stats = [];
+      data.mcpSource = 'error';
+      data.mcpError = mcpServers.error || 'MCP 服务清单读取失败';
+    }
+
+    // 业务域
+    const [dash, prod, ord, shop] = results.slice(4, 8);
+    const approvals = results[11];
+    applyDashboard(dash.ok ? dash.data : null, data.agents, approvals.ok ? approvals.data : []);
+    data.businessSource = dash.ok && prod.ok && ord.ok && shop.ok ? 'live' : 'error';
+    if (prod.ok) applyBusiness('products', prod.data);
+    if (ord.ok) applyBusiness('orders', ord.data);
+    if (shop.ok) applyBusiness('shops', shop.data);
+
+    // 设置：风控 / 环境
+    const risk = results[8];
+    const env = results[9];
+    if (risk.ok) applyRisk(risk.data);
+    if (env.ok) applyEnvironment(env.data);
+    if (!risk.ok && !env.ok) data.settingsSource = 'error';
+
+    // Agent 团队统计
+    const team = results[10];
+    if (team.ok) applyTeamStats(team.data);
+
+    markLive();
+    refresh();
+  }
+
+  /** 供页面写操作后局部刷新（例如保存风控后重取该 Tab 数据）。 */
+  WB.api.refreshSettings = async function () {
+    const results = await Promise.all([
+      WB.api.request('GET', '/api/settings/risk'),
+      WB.api.request('GET', '/api/settings/environment'),
+    ]);
+    if (results[0].ok) applyRisk(results[0].data);
+    if (results[1].ok) applyEnvironment(results[1].data);
+  };
+
+  WB.api.refreshBusiness = async function (key) {
+    const res = await WB.api.request('GET', '/api/business/' + key);
+    if (res.ok) applyBusiness(key, res.data);
+    return res;
+  };
+
+  /* ------------------------------ 启动 ------------------------------ */
+
+  function start() {
+    loadAll().catch(function (err) {
+      markOffline(String((err && err.message) || err || '加载失败'));
+      refresh();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

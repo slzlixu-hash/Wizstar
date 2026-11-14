@@ -283,12 +283,40 @@ public sealed class McpJsonRpcClient(
         }
     }
 
+    /// <summary>
+    /// 出站鉴权（四档可插拔）：none 本地直连裸奔 / bearer 标准 API Key /
+    /// header 自定义请求头 / hmac 仅高危跨公网服务使用（自动签名）。
+    /// </summary>
     private void ApplyAuthHeaders(HttpRequestMessage request, string body, string signPath)
     {
-        var authorization = McpHmacSigner.BuildAuthorizationHeader(config, HttpMethod.Post, signPath, body);
-        if (authorization is not null)
+        switch (config.EffectiveAuthType)
         {
-            request.Headers.TryAddWithoutValidation("Authorization", authorization);
+            case McpAuthTypes.Bearer:
+                if (!string.IsNullOrWhiteSpace(config.AuthSecret))
+                {
+                    request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + config.AuthSecret);
+                }
+                break;
+
+            case McpAuthTypes.Header:
+                if (!string.IsNullOrWhiteSpace(config.AuthSecret))
+                {
+                    var headerName = string.IsNullOrWhiteSpace(config.AuthHeaderName)
+                        ? "X-Api-Key"
+                        : config.AuthHeaderName!.Trim();
+                    request.Headers.TryAddWithoutValidation(headerName, config.AuthSecret);
+                }
+                break;
+
+            case McpAuthTypes.Hmac:
+                var authorization = McpHmacSigner.BuildAuthorizationHeader(config, HttpMethod.Post, signPath, body);
+                if (authorization is not null)
+                {
+                    request.Headers.TryAddWithoutValidation("Authorization", authorization);
+                }
+                break;
+
+            // case McpAuthTypes.None：本地服务直连，不带任何 Authorization 头
         }
 
         // 店铺凭证：仅走 HTTP 头透传，严禁进 JSON-RPC 消息体 / 日志 / Prompt（规范 §2.3 安全红线）

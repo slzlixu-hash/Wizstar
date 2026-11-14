@@ -2,18 +2,17 @@
 
 /**
  * 系统设置页
- *   Tab 1：模型与 API Key 设置（供应商卡 + 支持模型管理 + Agent 默认模型映射分派表）
- *   Tab 2：全局业务风控（L1–L4 风险等级与审批策略）
- *   Tab 3：环境与网络配置（环境信息 + 网络开关 + 连通性测试）
+ *   Tab 1：模型与 API Key 设置（供应商卡：编辑 / 模型管理 / 删除 + 虚线新增卡）
+ *   Tab 2：全局业务风控（L1–L3 风险等级与审批策略，落 sys_risk_policy）
+ *   Tab 3：环境与网络配置（真实运行参数 + 可持久化开关）
  *
- * A2：模型与 API Key 接真实 `/api/llm/*`（写操作返回完整快照，直接覆盖 WB.data.settings）。
- *     后端不可用时自动降级为演示交互，不产生 console.error、不白屏。
- *     风控 / 环境两个 Tab 仍为本地演示数据（本期不做业务表写入）。
+ * 三个 Tab 全部接真实接口，无演示降级：
+ *   模型  → /api/llm/*
+ *   风控  → GET/PUT /api/settings/risk
+ *   环境  → GET/PUT /api/settings/environment
  *
- * 保留原有全部元素：页头操作区、三个 Tab、供应商卡内 Base URL / API Key（掩码回显）/
- * 支持模型 chips / 底部按钮（编辑供应商 + 管理 + 删除）、Agent 分派表、虚线添加卡、添加自定义供应商链接。
- * 单独「配置 API Key」按钮已取消，API Key 录入合并进「编辑供应商」弹框（留空=不修改）。
- * 「支持模型」管理入口从模型 chip 行移入卡片底部，与「编辑供应商」并排；「内置」标签与「已启用」状态标签平排于卡头右侧。
+ * 风控等级与后端 RiskLevels 一一对应（read / write / irreversible）；
+ * irreversible 为平台强制人工审批，开关锁定不可关闭（服务端从不自动批准）。
  */
 (function () {
   const WB = window.WB;
@@ -36,9 +35,9 @@
     '自定义 (OpenAI 兼容)': '',
   };
 
-  /* ------------------------------ 真实 / 演示开关 ------------------------------ */
+  /* ------------------------------ 真实链路判定 ------------------------------ */
   function isLive() {
-    return !!(WB.data && WB.data.llmSource === 'live' && WB.api && WB.api.available());
+    return !!(WB.data && WB.data.app && WB.data.app.source === 'live' && WB.api && WB.api.available());
   }
 
   function esc(v) {
@@ -64,14 +63,10 @@
   }
 
   /**
-   * 统一写操作。成功 → 应用快照 + 重渲染 + 成功 toast；
-   * 失败 → 明确提示原因并保留当前数据；演示态 → 只给演示 toast。
+   * 统一写操作：成功 → 应用返回快照 + 重渲染 + 成功 toast；
+   * 失败 → 明确提示原因并保留当前数据。没有演示分支——接口不通就如实报错。
    */
   async function call(method, path, body, toast, okMessage) {
-    if (!isLive()) {
-      toast(okMessage + '（演示）', 'info');
-      return { ok: false, demo: true };
-    }
     let res;
     try {
       res = await WB.api.request(method, path, body);
@@ -86,35 +81,6 @@
     if (res.data) applySnapshot(res.data);
     toast(okMessage, 'success');
     return res;
-  }
-
-  /* ------------------------------ 页头操作区 ------------------------------ */
-  function headerActions() {
-    const models = app.globalModels && app.globalModels.length ? app.globalModels : [app.globalModel];
-    const current = app.globalModel || models[0] || '';
-
-    return [
-      ui.btn({ label: '新增模型供应商', icon: 'plus', tone: 'gradient', id: 'set-add-provider-btn' }),
-      ui.btn({ label: '支持模型', icon: 'layers', tone: 'outline', size: 'sm', id: 'set-models-btn' }),
-      `<div class="set-global" id="set-global">
-        <button type="button" class="set-global-btn" id="set-global-btn" aria-haspopup="listbox" aria-expanded="false" title="选择默认全局模型">
-          <span class="set-global-k">默认全局模型：</span>
-          <span class="set-global-v" id="set-global-value">${esc(current)}</span>
-          <span class="set-global-caret">${ui.icon('chevron-down', 14)}</span>
-        </button>
-        <div class="set-global-menu" id="set-global-menu" role="listbox" aria-label="默认全局模型">
-          ${models
-            .map(
-              (model) =>
-                `<button type="button" class="set-global-item${model === current ? ' active' : ''}" role="option" aria-selected="${
-                  model === current ? 'true' : 'false'
-                }" data-set-global-model="${esc(model)}"><span>${esc(model)}</span>${ui.icon('check', 13)}</button>`
-            )
-            .join('')}
-        </div>
-      </div>`,
-      ui.btn({ label: '保存更改', tone: 'primary', id: 'set-save-btn' }),
-    ].join('');
   }
 
   /* ------------------------------ 模型与 API Key ------------------------------ */
@@ -145,7 +111,7 @@
     /* 支持模型管理入口：与「编辑供应商」并排，不再放在模型 chip 行内。 */
     buttons.push(
       ui.btn({
-        label: '管理',
+        label: '模型管理',
         icon: 'layers',
         tone: 'outline',
         size: 'sm',
@@ -206,38 +172,16 @@
     </button>`;
   }
 
-  function mappingRows() {
-    return S.modelMapping
-      .map(
-        (row) => `<div class="set-map-row" data-agent="${esc(row.agentId)}">
-          <span class="set-map-agent">${esc(row.label)}</span>
-          <div class="set-map-side">
-            <span class="set-map-label">-&gt; 摆渡的模型:</span>
-            <span class="set-map-select">${ui.select({
-              options: S.modelOptions,
-              value: row.model,
-              attrs: `data-map-select="${esc(row.agentId)}" aria-label="${esc(row.label)} 默认模型"`,
-            })}</span>
-          </div>
-        </div>`
-      )
-      .join('');
-  }
-
   function modelsPanel() {
     return `<div class="set-panel" data-panel="models">
-      <div class="set-providers">${S.providers.map(providerCard).join('')}${addProviderCard()}</div>
-      ${ui.card({
-        title: 'Agent 默认模型映射分派表',
-        sub: '设置默认模型映射分派表；Agent 未单独配置模型时，按此表分派调用。修改后点「保存更改」提交。',
-        cls: 'set-map-card',
-        body: `<div class="set-map-list">${mappingRows()}</div>`,
-      })}
+      <div class="set-providers">${(S.providers || []).map(providerCard).join('')}${addProviderCard()}</div>
     </div>`;
   }
 
   /* ------------------------------ 全局业务风控 ------------------------------ */
   function riskCard(item) {
+    // locked = 平台强制人工审批（不可逆操作），开关固定为「需人工审批」且禁用
+    const locked = !!item.locked;
     return `<section class="set-risk-card set-risk--${esc(item.tone)}">
       <div class="set-risk-head">
         <span class="set-risk-title">${esc(item.title)}</span>
@@ -247,29 +191,39 @@
       <div class="set-risk-foot">
         <span class="set-risk-foot-label">执行策略</span>
         <label class="switch">
-          <input type="checkbox" data-risk-toggle="${esc(item.id)}"${item.auto ? ' checked' : ''} aria-label="${esc(
-            item.title
-          )} 执行策略" />
+          <input type="checkbox" data-risk-toggle="${esc(item.id)}"${item.auto ? ' checked' : ''}${
+            locked ? ' disabled' : ''
+          } aria-label="${esc(item.title)} 执行策略" />
           <span class="track"></span>
-          <span class="set-risk-state">${item.auto ? '自动执行' : '需人工审批'}</span>
+          <span class="set-risk-state">${locked ? '强制人工审批' : item.auto ? '自动执行' : '需人工审批'}</span>
         </label>
       </div>
     </section>`;
   }
 
   function riskPanel() {
+    const items = S.riskPolicy || [];
     return `<div class="set-panel is-hidden" data-panel="risk">
-      <div class="set-risk-grid">${S.riskPolicy.map(riskCard).join('')}</div>
+      ${
+        items.length
+          ? `<div class="set-risk-grid">${items.map(riskCard).join('')}</div>`
+          : `<div class="empty"><div class="empty-title">风控配置读取失败</div><div class="empty-desc">请检查 /api/settings/risk 是否可达。</div></div>`
+      }
       <div class="set-note">
         <span class="set-note-ico">${ui.icon('shield', 16)}</span>
-        <span><strong>服务端不自动批准 HITL：</strong>L3 / L4 操作由服务端强制挂起人工审批，Agent 无法自行重试或跳过；风险等级与开关仅影响本地演示策略。</span>
+        <span><strong>服务端不自动批准 HITL：</strong>不可逆操作由服务端强制挂起人工审批，Agent 无法自行重试或跳过；
+        该等级开关已锁定，即使数据库被手工修改也不会放行。L1 / L2 可配置为「需人工审批」以加严管控，保存后立即生效。</span>
       </div>
     </div>`;
   }
 
   /* ------------------------------ 环境与网络配置 ------------------------------ */
   function envRows() {
-    return S.environment
+    const items = S.environment || [];
+    if (!items.length) {
+      return `<div class="empty"><div class="empty-title">环境信息读取失败</div><div class="empty-desc">请检查 /api/settings/environment 是否可达。</div></div>`;
+    }
+    return items
       .map(
         (item) => `<div class="set-env-row">
           <div class="set-env-top">
@@ -283,7 +237,7 @@
   }
 
   function toggleRows() {
-    return S.toggles
+    return (S.toggles || [])
       .map(
         (item) => `<div class="set-toggle-row">
           <div class="set-toggle-copy">
@@ -303,7 +257,7 @@
           <div class="card-head">
             <div>
               <div class="card-title">环境信息</div>
-              <div class="card-sub">本机运行环境与操作账本参数（演示数据）</div>
+              <div class="card-sub">本机真实运行参数（只读，来自 IConfiguration）</div>
             </div>
             <span class="set-head-side">${ui.badge('只读', { tone: 'slate' })}</span>
           </div>
@@ -327,23 +281,7 @@
     </div>`;
   }
 
-  /* ------------------------------ 弹窗 / 按钮加载 ------------------------------ */
-  function runButton(btn, loadingText, ms, done) {
-    if (!btn || btn.disabled) return;
-    const original = btn.innerHTML;
-    btn.style.minWidth = `${btn.offsetWidth}px`;
-    btn.disabled = true;
-    btn.classList.add('is-busy');
-    btn.innerHTML = `<span class="spinner"></span><span>${esc(loadingText)}</span>`;
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.classList.remove('is-busy');
-      btn.style.minWidth = '';
-      btn.innerHTML = original;
-      if (typeof done === 'function') done();
-    }, ms);
-  }
-
+  /* ------------------------------ 弹窗 / 表单辅助 ------------------------------ */
   function field(overlay, name) {
     const el = overlay.querySelector(`[data-f="${name}"]`);
     return el ? String(el.value || '').trim() : '';
@@ -372,7 +310,7 @@
 
     const overlay = ui.modal({
       title: `编辑供应商 · ${esc(provider.name)}`,
-      desc: isLive() ? '保存后立即生效，模型通道会按新配置热切换。' : '演示界面：修改仅保存在当前页面，不会写入真实配置。',
+      desc: '保存后立即生效，模型通道会按新配置热切换。',
       body,
       actions: `${ui.btn({ label: '取消', tone: 'ghost', attrs: 'data-modal-close' })}${ui.btn({
         label: '保存',
@@ -399,7 +337,7 @@
         toast,
         '供应商配置已更新'
       );
-      if (res && (res.ok || res.demo)) overlay.close();
+      if (res && res.ok) overlay.close();
     });
   }
 
@@ -460,11 +398,11 @@
         toast,
         '自定义供应商已添加'
       );
-      if (res && (res.ok || res.demo)) overlay.close();
+      if (res && res.ok) overlay.close();
     });
   }
 
-  /** 支持模型管理入口：页头「支持模型」与卡内「管理」按钮共用。 */
+  /** 支持模型管理入口：按供应商维护可调用的模型 ID。 */
   function openModelsModal(providerId, toast) {
     const first = findProvider(providerId) || S.providers[0];
     if (!first) {
@@ -544,13 +482,6 @@
           `模型已添加：${modelId}`
         );
         if (input && res.ok) input.value = '';
-        if (res.demo) {
-          const p = findProvider(pid);
-          if (p) {
-            p.models = (p.models || []).concat([{ id: modelId, name: modelId }]);
-            if (input) input.value = '';
-          }
-        }
         renderList();
         return;
       }
@@ -558,32 +489,23 @@
       const del = e.target.closest('[data-model-del]');
       if (del) {
         const modelId = del.dataset.modelDel;
-        const res = await call(
+        await call(
           'DELETE',
           `/api/llm/providers/${pathId(pid)}/models?modelId=${pathId(modelId)}`,
           null,
           toast,
           `模型已删除：${modelId}`
         );
-        if (res.demo) {
-          const p = findProvider(pid);
-          if (p) p.models = (p.models || []).filter((m) => (typeof m === 'string' ? m : m.id) !== modelId);
-        }
         renderList();
       }
     });
   }
 
-  /* 文档级“点击空白关闭下拉”，模块级保存引用，避免重复渲染后监听器累积。 */
-  let outsideClickHandler = null;
-
   /* ------------------------------ 页面注册 ------------------------------ */
   pages.settings = {
     title: '系统设置',
     subtitle: '',
-    get actions() {
-      return headerActions();
-    },
+    actions: '',
 
     render() {
       return `<div class="stack set-page">
@@ -596,9 +518,6 @@
                 }" data-set-tab="${esc(tab.id)}">${esc(tab.label)}</button>`
             ).join('')}
           </div>
-          <button type="button" class="set-add-link" data-set-add-provider>
-            ${ui.icon('plus', 15)}<span>添加自定义供应商</span><span class="set-add-hint">(OpenAI / 阿里通义 / 硅基流动)</span>
-          </button>
         </div>
         ${modelsPanel()}
         ${riskPanel()}
@@ -609,14 +528,21 @@
     mount(root, ctx) {
       const toast = ctx.toast;
 
-      /* 设置页自治兜底：首屏并行预取稍慢时（或用户秒进设置页），进页面再取一次。
-         llmSource 变成 live 后不再重复请求，避免 WB.go 重渲染造成循环。 */
-      if (!isLive() && WB.api && WB.api.available()) {
-        WB.api.request('GET', '/api/llm/settings')
-          .then(function (res) {
-            if (res.ok && WB.data && WB.data.llmSource !== 'live') applySnapshot(res.data);
-          })
-          .catch(function () {});
+      /* 首屏预取可能稍慢（用户秒进设置页）：模型配置缺失时补取一次；
+         风控 / 环境两块若为空也补取，避免停留在空态。 */
+      if (WB.api && WB.api.available()) {
+        if (!S.providers || !S.providers.length) {
+          WB.api.request('GET', '/api/llm/settings')
+            .then(function (res) {
+              if (res.ok) applySnapshot(res.data);
+            })
+            .catch(function () {});
+        }
+        if (!(S.riskPolicy || []).length || !(S.environment || []).length) {
+          Promise.resolve(WB.api.refreshSettings()).then(() => {
+            if ((S.riskPolicy || []).length) WB.go('settings');
+          });
+        }
       }
 
       /* ---------- Tab 切换 ---------- */
@@ -633,108 +559,7 @@
         root.scrollTop = 0;
       });
 
-      /* ---------- 页头：全局模型下拉 ---------- */
-      const globalWrap = document.getElementById('set-global');
-      const globalBtn = document.getElementById('set-global-btn');
-      const globalValue = document.getElementById('set-global-value');
-      const globalMenu = document.getElementById('set-global-menu');
-
-      if (globalWrap && globalBtn && globalMenu) {
-        const closeGlobal = () => {
-          globalWrap.classList.remove('open');
-          globalBtn.setAttribute('aria-expanded', 'false');
-        };
-
-        globalBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const open = globalWrap.classList.toggle('open');
-          globalBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        });
-
-        globalMenu.querySelectorAll('[data-set-global-model]').forEach((item) => {
-          item.addEventListener('click', async () => {
-            const value = item.dataset.setGlobalModel;
-            if (globalValue) globalValue.textContent = value;
-            globalMenu.querySelectorAll('.set-global-item').forEach((node) => {
-              const active = node === item;
-              node.classList.toggle('active', active);
-              node.setAttribute('aria-selected', active ? 'true' : 'false');
-            });
-            closeGlobal();
-
-            if (!isLive()) {
-              toast(`默认全局模型已切换为 ${value}`, 'success');
-              return;
-            }
-            const res = await WB.api.request('PUT', '/api/llm/default-model', { modelId: value });
-            if (res.ok) {
-              applySnapshot(res.data);
-              toast(`默认全局模型已切换为 ${value}`, 'success');
-            } else {
-              toast(`切换未生效：${res.error || '服务未连接'}`, 'warn');
-            }
-          });
-        });
-
-        if (outsideClickHandler) document.removeEventListener('click', outsideClickHandler);
-        outsideClickHandler = (e) => {
-          const wrap = document.getElementById('set-global');
-          if (!wrap) {
-            document.removeEventListener('click', outsideClickHandler);
-            outsideClickHandler = null;
-            return;
-          }
-          if (!wrap.contains(e.target)) {
-            wrap.classList.remove('open');
-            const btn = document.getElementById('set-global-btn');
-            if (btn) btn.setAttribute('aria-expanded', 'false');
-          }
-        };
-        document.addEventListener('click', outsideClickHandler);
-      }
-
-      /* ---------- 页头：保存 / 新增供应商 / 支持模型 ---------- */
-      const saveBtn = document.getElementById('set-save-btn');
-      if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-          runButton(saveBtn, '保存中…', 400, async () => {
-            const bindings = {};
-            root.querySelectorAll('[data-map-select]').forEach((sel) => {
-              if (sel.dataset.mapSelect && sel.value) bindings[sel.dataset.mapSelect] = sel.value;
-            });
-            const globalEl = document.getElementById('set-global-value');
-            const defaultModel = globalEl ? String(globalEl.textContent || '').trim() : app.globalModel;
-
-            if (!isLive()) {
-              toast('设置已保存，模型与风控策略已同步（演示）', 'success');
-              return;
-            }
-
-            const first = await WB.api.request('PUT', '/api/llm/bindings', { bindings: bindings });
-            if (!first.ok) {
-              toast(`保存失败：${first.error || '服务未连接'}`, 'warn');
-              return;
-            }
-            let snapshot = first.data;
-            if (defaultModel && (S.modelOptions || []).indexOf(defaultModel) >= 0) {
-              const second = await WB.api.request('PUT', '/api/llm/default-model', { modelId: defaultModel });
-              if (second.ok) snapshot = second.data;
-            }
-            applySnapshot(snapshot);
-            toast('设置已保存，模型通道已按新配置热切换', 'success');
-          });
-        });
-      }
-
-      const headerAddBtn = document.getElementById('set-add-provider-btn');
-      if (headerAddBtn) headerAddBtn.addEventListener('click', () => openAddProviderModal(toast));
-
-      const headerModelsBtn = document.getElementById('set-models-btn');
-      if (headerModelsBtn) {
-        headerModelsBtn.addEventListener('click', () => openModelsModal(S.providers[0] && S.providers[0].id, toast));
-      }
-
-      /* ---------- 供应商卡：编辑（含 API Key）/ 删除 / 支持模型 ---------- */
+      /* ---------- 供应商卡：编辑（含 API Key）/ 删除 / 模型管理 ---------- */
       ui.bind(root, '[data-set-edit]', 'click', (e) => {
         const provider = findProvider(e.currentTarget.dataset.setEdit);
         if (provider) openProviderModal(provider, toast);
@@ -745,7 +570,7 @@
         const provider = findProvider(id);
         const ok = await ui.confirm({
           title: '删除供应商',
-          desc: `将同时删除「${provider ? provider.name : id}」下的支持模型与 Agent 分派，且不可恢复。`,
+          desc: `将删除「${provider ? provider.name : id}」及其支持模型，且不可恢复。`,
           ok: '删除',
           tone: 'danger',
         });
@@ -759,31 +584,59 @@
 
       ui.bind(root, '[data-set-add-provider]', 'click', () => openAddProviderModal(toast));
 
-      /* ---------- 映射表下拉 ---------- */
-      ui.bind(root, '[data-map-select]', 'change', (e) => {
-        const agentId = e.currentTarget.dataset.mapSelect;
-        const row = S.modelMapping.find((item) => item.agentId === agentId);
-        toast(`${row ? row.label : 'Agent'} 默认模型已切换为 ${e.currentTarget.value}（保存后生效）`, 'info');
-      });
-
-      /* ---------- 风控开关 ---------- */
-      ui.bind(root, '[data-risk-toggle]', 'change', (e) => {
+      /* ---------- 风控开关：真实写库，保存后立即影响工具审批判定 ---------- */
+      ui.bind(root, '[data-risk-toggle]', 'change', async (e) => {
         const input = e.currentTarget;
-        const item = S.riskPolicy.find((r) => r.id === input.dataset.riskToggle);
+        const id = input.dataset.riskToggle;
+        const item = (S.riskPolicy || []).find((r) => r.id === id);
         const state = input.closest('.switch');
         const label = state && state.querySelector('.set-risk-state');
-        if (label) label.textContent = input.checked ? '自动执行' : '需人工审批';
+        const want = input.checked;
+
+        if (label) label.textContent = want ? '自动执行' : '需人工审批';
+        input.disabled = true;
+
+        const res = await WB.api.request('PUT', '/api/settings/risk/' + encodeURIComponent(id), { auto: want });
+
+        input.disabled = false;
+
+        if (!res.ok) {
+          // 回滚界面到真实值，不做「假成功」
+          input.checked = !want;
+          if (label) label.textContent = !want ? '自动执行' : '需人工审批';
+          toast('保存失败：' + (res.error || '服务未连接'), 'warn');
+          return;
+        }
+
+        await WB.api.refreshSettings();
         toast(
-          `${item ? `${item.level} ${item.title}` : '风控策略'}：${input.checked ? '自动执行' : '需人工审批'}`,
-          input.checked ? 'success' : 'warn'
+          `${item ? `${item.level} ${item.title}` : '风控策略'} 已保存为「${want ? '自动执行' : '需人工审批'}」`,
+          want ? 'success' : 'info'
         );
       });
 
-      /* ---------- 环境开关 ---------- */
-      ui.bind(root, '[data-toggle]', 'change', (e) => {
+      /* ---------- 环境开关：真实写库 ---------- */
+      ui.bind(root, '[data-toggle]', 'change', async (e) => {
         const input = e.currentTarget;
-        const item = S.toggles.find((t) => t.id === input.dataset.toggle);
-        toast(`${item ? item.label : '网络选项'}：已${input.checked ? '开启' : '关闭'}`, input.checked ? 'success' : 'info');
+        const id = input.dataset.toggle;
+        const item = (S.toggles || []).find((t) => t.id === id);
+        const want = input.checked;
+
+        input.disabled = true;
+        const res = await WB.api.request('PUT', '/api/settings/environment/' + encodeURIComponent(id), {
+          checked: want,
+        });
+        input.disabled = false;
+
+        if (!res.ok) {
+          input.checked = !want;
+          toast('保存失败：' + (res.error || '服务未连接'), 'warn');
+          return;
+        }
+
+        await WB.api.refreshSettings();
+        const tip = res.data && res.data.effective ? '（' + res.data.effective + '）' : '';
+        toast(`${item ? item.label : '配置项'}：已${want ? '开启' : '关闭'}${tip}`, want ? 'success' : 'info');
       });
 
       /* ---------- 测试连通性：真实 /models 探测，失败显式标注 ---------- */
@@ -803,15 +656,6 @@
             testBtn.classList.remove('is-busy');
             testBtn.innerHTML = original;
           };
-
-          if (!isLive()) {
-            setTimeout(() => {
-              restore();
-              if (netResult) netResult.innerHTML = `<i class="status-dot online"></i><span>${esc(app.endpoint)} · 12ms · 正常</span>`;
-              toast(`连通性正常 · ${app.endpoint}（演示）`, 'success');
-            }, 750);
-            return;
-          }
 
           WB.api.request('POST', '/api/llm/test', {})
             .then((res) => {

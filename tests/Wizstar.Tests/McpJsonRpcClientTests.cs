@@ -15,16 +15,25 @@ public sealed class FakeMcpServer : IDisposable
 
     public string BaseUrl { get; }
 
-    public FakeMcpServer(string? hmacSecret = null)
+    /// <summary>按四档鉴权期望构造：hmac 验签 / bearer 头 / 自定义 header / none（拒绝任何鉴权头，证明客户端确实没发）。</summary>
+    public FakeMcpServer(string? hmacSecret = null, string? bearerSecret = null, string? headerSecret = null, string? headerName = "X-Api-Key")
     {
         var port = GetFreePort();
         _prefix = $"http://127.0.0.1:{port}/mcpdemo/";
         BaseUrl = $"http://127.0.0.1:{port}/mcpdemo";
         HmacSecret = hmacSecret;
+        BearerSecret = bearerSecret;
+        HeaderSecret = headerSecret;
+        HeaderName = headerName ?? "X-Api-Key";
         _listener.Prefixes.Add(_prefix);
     }
 
     public string? HmacSecret { get; }
+    public string? BearerSecret { get; }
+    public string? HeaderSecret { get; }
+    public string HeaderName { get; }
+
+    public int AuthFailCount;
 
     public int HealthProbeCount;
     public int InitializeCount;
@@ -83,13 +92,14 @@ public sealed class FakeMcpServer : IDisposable
         var id = root.TryGetProperty("id", out var idNode) ? idNode.GetInt64() : (long?)null;
         var method = root.TryGetProperty("method", out var methodNode) ? methodNode.GetString() : "";
 
-        if (HmacSecret is not null && !VerifyHmac(request, body))
+        if (!VerifyAuth(request, body))
         {
+            Interlocked.Increment(ref AuthFailCount);
             await WriteJsonAsync(response, 200, new
             {
                 jsonrpc = "2.0",
                 id,
-                error = new { code = 41001, message = "HMAC 签名校验失败" }
+                error = new { code = 41001, message = "鉴权失败" }
             });
             return;
         }
@@ -168,6 +178,18 @@ public sealed class FakeMcpServer : IDisposable
                 });
                 break;
         }
+    }
+
+    private bool VerifyAuth(HttpListenerRequest request, string body)
+    {
+        if (HmacSecret is not null) return VerifyHmac(request, body);
+        if (BearerSecret is not null) return request.Headers["Authorization"] == "Bearer " + BearerSecret;
+        if (HeaderSecret is not null) return request.Headers[HeaderName] == HeaderSecret;
+
+        // none 模式：任何鉴权头都算多余（证明客户端确实没发 Authorization / Key 头）
+        return request.Headers["Authorization"] is null
+            && request.Headers["X-Api-Key"] is null
+            && request.Headers["X-Custom-Key"] is null;
     }
 
     private bool VerifyHmac(HttpListenerRequest request, string body)
@@ -309,9 +331,22 @@ public class McpJsonRpcClientTests : IDisposable
     [Fact]
     public async Task HmacSignedRequests_AreAcceptedByServer()
     {
-        var client = CreateClient("wizstar", "test-secret");
+        // 兼容口径：配置只有 keyId+secret、未写 authType → 自动归一化为 hmac 并签名
+        using var server = new FakeMcpServer(hmacSecret: "test-secret");
+        server.Start();
+
+        var config = new McpServiceConfig
+        {
+            Id = "fake",
+            Transport = "http",
+            Url = server.BaseUrl,
+            AuthKeyId = "wizstar",
+            AuthSecret = "test-secret"
+        };
+        var client = new McpJsonRpcClient("fake", config, _http, _logger);
         var tools = await client.ListToolsAsync();
         Assert.Equal(2, tools.Count);
+        Assert.Equal(0, server.AuthFailCount);
     }
 
     [Fact]
@@ -325,5 +360,124 @@ public class McpJsonRpcClientTests : IDisposable
 
         var ex = await Assert.ThrowsAsync<McpProtocolException>(() => client.ConnectAsync());
         Assert.Contains("41001", ex.Message);
+    }
+
+    /* ------------------------------ 四档鉴权模式 ------------------------------ */
+
+    [Theory]
+    // 旧清单兼容：未写 authType 但配了密钥对 → hmac；其余退化 none
+    [InlineData(null, true, McpAuthTypes.Hmac)]
+    [InlineData("", false, McpAuthTypes.None)]
+    [InlineData("bearer", false, McpAuthTypes.Bearer)]
+    [InlineData("HEADER", false, McpAuthTypes.Header)]
+    [InlineData("unknown", true, McpAuthTypes.None)]
+    [InlineData("HMAC", false, McpAuthTypes.Hmac)]
+    public void AuthType_NormalizesCorrectly(string? raw, bool hasKeyIdAndSecret, string expected)
+    {
+        Assert.Equal(expected, McpAuthTypes.Normalize(raw, hasKeyIdAndSecret));
+    }
+
+    [Fact]
+    public async Task NoneMode_SendsNoAuthHeader_EvenWithStaleCredentials()
+    {
+        // none 服务端拒绝任何鉴权头：残留的 keyId/secret 也不得被客户端带出
+        using var server = new FakeMcpServer();
+        server.Start();
+
+        var config = new McpServiceConfig
+        {
+            Id = "fake",
+            Transport = "http",
+            Url = server.BaseUrl,
+            AuthType = McpAuthTypes.None,
+            AuthKeyId = "stale-key",
+            AuthSecret = "stale-secret"
+        };
+        var client = new McpJsonRpcClient("fake", config, _http, _logger);
+
+        var tools = await client.ListToolsAsync();
+        Assert.Equal(2, tools.Count);
+        Assert.Equal(0, server.AuthFailCount);
+    }
+
+    [Fact]
+    public async Task BearerMode_SendsStandardAuthorizationHeader()
+    {
+        using var server = new FakeMcpServer(bearerSecret: "bk-secret-123");
+        server.Start();
+
+        var config = new McpServiceConfig
+        {
+            Id = "fake",
+            Transport = "http",
+            Url = server.BaseUrl,
+            AuthType = McpAuthTypes.Bearer,
+            AuthSecret = "bk-secret-123"
+        };
+        var client = new McpJsonRpcClient("fake", config, _http, _logger);
+
+        Assert.Equal(2, (await client.ListToolsAsync()).Count);
+        Assert.Equal(0, server.AuthFailCount);
+    }
+
+    [Fact]
+    public async Task BearerMode_WrongKey_IsRejectedByServer()
+    {
+        using var server = new FakeMcpServer(bearerSecret: "bk-secret-123");
+        server.Start();
+
+        var config = new McpServiceConfig
+        {
+            Id = "fake",
+            Transport = "http",
+            Url = server.BaseUrl,
+            AuthType = McpAuthTypes.Bearer,
+            AuthSecret = "wrong-key"
+        };
+        var client = new McpJsonRpcClient("fake", config, _http, _logger);
+
+        var ex = await Assert.ThrowsAsync<McpProtocolException>(() => client.ConnectAsync());
+        Assert.Contains("41001", ex.Message);
+    }
+
+    [Fact]
+    public async Task HeaderMode_SendsCustomHeader()
+    {
+        using var server = new FakeMcpServer(headerSecret: "hk-456", headerName: "X-Custom-Key");
+        server.Start();
+
+        var config = new McpServiceConfig
+        {
+            Id = "fake",
+            Transport = "http",
+            Url = server.BaseUrl,
+            AuthType = McpAuthTypes.Header,
+            AuthHeaderName = "X-Custom-Key",
+            AuthSecret = "hk-456"
+        };
+        var client = new McpJsonRpcClient("fake", config, _http, _logger);
+
+        Assert.Equal(2, (await client.ListToolsAsync()).Count);
+        Assert.Equal(0, server.AuthFailCount);
+    }
+
+    [Fact]
+    public async Task HeaderMode_DefaultsToXApiKeyHeader()
+    {
+        using var server = new FakeMcpServer(headerSecret: "hk-456"); // 缺省头名 X-Api-Key
+        server.Start();
+
+        var config = new McpServiceConfig
+        {
+            Id = "fake",
+            Transport = "http",
+            Url = server.BaseUrl,
+            AuthType = McpAuthTypes.Header,
+            AuthSecret = "hk-456"
+        };
+        var client = new McpJsonRpcClient("fake", config, _http, _logger);
+
+        Assert.Equal(2, (await client.ListToolsAsync()).Count);
+        Assert.Equal(0, server.AuthFailCount);
     }
 }

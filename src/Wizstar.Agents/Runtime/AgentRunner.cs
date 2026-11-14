@@ -44,7 +44,7 @@ public abstract record AgentRunEvent
 ///
 /// 工具循环交给 FunctionInvokingChatClient（微软维护，已处理 tool_calls 拦截 / 结果回传 /
 /// 未知工具报错回传 / 循环上限 / 连续错误熔断），我们只负责：
-///  ① 装配：按 AgentProfile 通配授权从 ToolRegistry 取函数，超上限拒绝启动；
+///  ① 装配：按 AgentProfile 通配授权从 ToolRegistry 取函数（授权范围即工具可见面）；
 ///  ② 治理：每次调用经 WizstarToolFunction → ToolInvoker（风险分级 / 幂等 / HITL）；
 ///  ③ 收敛：步数用尽或模型没给出结论时如实返回 max_steps / failed，不假装成功。
 /// 并发口径：同一轮多个 tool_calls 串行（AllowConcurrentInvocation=false），审批与审计顺序可追溯。
@@ -94,7 +94,7 @@ public sealed class AgentRunner(
         var input = ValidateInput(options.Message);
         var handle = chatProvider.Get();
 
-        // ① 装配：超上限直接拒绝启动（ToolRegistry 内部强制）
+        // ① 装配：按授权清单全量装配（ToolRegistry 内部去重，不设数量上限）
         var registered = registry.ResolveForAgent(profile);
         var functions = new List<AIFunction>();
         var step = 0;

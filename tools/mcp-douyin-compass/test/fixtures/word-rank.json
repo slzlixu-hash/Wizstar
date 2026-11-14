@@ -1,0 +1,31 @@
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "module_data": {
+      "info_list": {
+        "compass_general_table_value": {
+          "data": [
+            {
+              "cell_info": {
+                "query": { "value": { "value_str": "加绒卫衣" } },
+                "search_show_ucnt": { "index_values": { "extra_value": { "lower": { "value": 80000 }, "upper": { "value": 250000 } } } },
+                "pay_amt": { "index_values": { "extra_value": { "lower": { "value": 900000 }, "upper": { "value": 2500000 } } } },
+                "product_show_ucnt": { "index_values": { "extra_value": { "lower": { "value": 50000 }, "upper": { "value": 150000 } } } },
+                "prod_show_click_ratio": { "index_values": { "extra_value": { "lower": { "value": 2.5 }, "upper": { "value": 7.5 } } } }
+              }
+            },
+            {
+              "cell_info": {
+                "query": { "value": { "value_str": "秋冬打底衫" } },
+                "search_show_ucnt": { "index_values": { "extra_value": { "lower": { "value": 20000 }, "upper": { "value": 80000 } } } },
+                "pay_amt": { "index_values": { "extra_value": { "lower": { "value": 100000 }, "upper": { "value": 300000 } } } }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "page_result": { "total": 2, "page_no": 1 }
+  }
+}

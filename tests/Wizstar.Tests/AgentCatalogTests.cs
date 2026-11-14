@@ -173,16 +173,19 @@ public class ToolRegistryWildcardTests
     }
 
     [Fact]
-    public void OverLimit_ThrowsInsteadOfTruncating()
+    public void WildcardAuthorization_AssemblesAllTools_WithoutLimit()
     {
-        var tools = Enumerable.Range(0, 10)
+        // 取消 MaxToolsPerRun 后：通配授权下工具全量装配，不因数量拒绝启动、不静默截断。
+        // 用 20 个（远超原 8 / 12 上限）确保「数量上限」确实已不复存在。
+        var tools = Enumerable.Range(0, 20)
             .Select(i => Tool("server", $"get_tool_{i}"))
             .ToList();
         var registry = new ToolRegistry(
             [new StaticProvider(tools)],
             LoggerFactoryHolder.Create<ToolRegistry>());
 
-        var ex = Assert.Throws<ApiException>(() => registry.ResolveForAgent(Profile("*")));
-        Assert.Contains("硬上限", ex.Message);
+        var assembled = registry.ResolveForAgent(Profile("*"));
+        Assert.Equal(20, assembled.Count);
+        Assert.Equal(20, assembled.Select(t => t.ModelName).Distinct().Count());
     }
 }

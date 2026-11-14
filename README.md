@@ -41,7 +41,7 @@ src/
   Wizstar.Contracts/             # 统一出参信封 / 错误码归一化 / ApiException
   Wizstar.Agents/                # MAF 内核
     Profiles/                    #   AgentProfile + agents.yaml 注册表
-    Tools/                       #   IToolProvider / ToolRegistry（通配授权 + 8 个硬上限）/ 内置演示工具
+    Tools/                       #   IToolProvider / ToolRegistry（按 allowedTools 通配授权装配）/ 内置演示工具
     Governance/                  #   风险分级（x-risk > 动词兜底 > 默认 write）+ HITL 审批闸门
     Ledger/                      #   SQLite WAL 幂等账本（回放 / 防篡改 43009）
     Runtime/                     #   ChatClient 供给（OpenAI 兼容 + 离线回退）/ AgentRunner / 会话
@@ -83,6 +83,14 @@ cd src/Wizstar.Api && dotnet run               # API（默认配置见 appsettin
 | GET/POST /api/approvals(/{id}/approve|reject) | HITL 审批单生命周期 |
 | GET  /api/operations/{id}?scope= | 幂等账本反查（孤儿对账） |
 | GET  /api/ui/bootstrap | 前端首屏只读聚合（health / agents / mcp 快照，见 `WorkBenchUI/INTEGRATION.md`） |
+| GET  /api/agents/stats | 名册在线数 + 操作账本近 7 日真实调用量与成功率 |
+| GET  /api/agents/{key} | 单 Agent 完整配置（含 `systemPrompt`） |
+| POST/PUT/DELETE /api/mcp/servers(/{id}) | MCP 服务注册 / 编辑重握手 / 停用（只停用不删数据） |
+| POST /api/mcp/servers/{id}/disconnect | 运行时停用，可再次握手恢复 |
+| POST /api/mcp/tools/call | 只读工具调用（`write`/`irreversible` 一律 `43002`） |
+| GET  /api/llm/settings 等 11 个 | 供应商 / 支持模型 / API Key / 默认模型 / Agent 分派 / 连通性探测 |
+| GET  /api/business/{products\|orders\|shops\|dashboard} | 商品 / 订单 / 店铺 / 工作台 KPI（真实业务表，只读） |
+| GET/PUT /api/settings/{risk\|environment} | 风控策略与环境开关（复用 `sys_risk_policy` 作 KV） |
 
 ## 关键口径（与三份规范文档对齐）
 
@@ -94,15 +102,19 @@ cd src/Wizstar.Api && dotnet run               # API（默认配置见 appsettin
    `operationId` 调用才真正执行。
 3. **幂等**：所有副作用操作平台侧注入 `op-{yyyyMMdd}-{hash16}`，SQLite WAL 账本
    `(scope, operationId)` 主键；同参回放 `replayed:true`，参数被篡改报 `43009`。
-4. **注意力保护**：单次运行工具硬上限 8，超限拒绝启动，不静默截断。
+4. **工具可见面**：不设单次运行工具数硬上限（2026-11-13 取消 `MaxToolsPerRun`）；
+   装配范围完全由 `agents.yaml` 的 `allowedTools` 授权清单决定，`ToolRegistry`
+   只做通配匹配与函数名去重。控制 Context 体积靠收窄授权，而不是运行时拒绝启动。
 5. **回环直连**：本地 MCP 不走系统代理（`LoopbackBypassProxy`），避免
    HTTP_PROXY 把 127.0.0.1 的请求串成绝对地址转发。
 
-## A1 前后端联调（只读）
+## 桌面控制台（WorkBenchUI）
 
-`WorkBenchUI` 启动时经 Electron 主进程 IPC 代理拉取 `GET /api/ui/bootstrap`，
-把真实 Agent 名册 / MCP 快照覆盖进界面数据；后端不可用时自动回退演示数据并标注角标。
-启动顺序与验收口径见 `WorkBenchUI/INTEGRATION.md`。
+`WorkBenchUI` 是 Electron 桌面控制台，**无演示数据**：启动时经主进程 IPC 代理并行拉取
+12 路真实接口（bootstrap / Agent / 审批 / MCP / 模型配置 / 业务域 / 平台配置），
+一次性构建界面数据。`GET /api/ui/bootstrap` 是唯一的「后端可用」判据——
+失败则整站进离线重试页，成功但单个接口失败只清空对应区块，**不伪造数据也不回退演示值**。
+启动顺序与端点清单见 `WorkBenchUI/INTEGRATION.md`。
 
 ## 后续阶段
 

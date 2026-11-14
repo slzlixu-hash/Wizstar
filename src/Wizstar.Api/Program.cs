@@ -7,9 +7,11 @@ using Wizstar.Agents.Runtime;
 using Wizstar.Agents.Tools;
 using Wizstar.Api.Middleware;
 using Wizstar.Api.Endpoints;
+using Wizstar.Api.Services;
 using Wizstar.Contracts;
 using Wizstar.Data;
 using Wizstar.Data.Llm;
+using Wizstar.Data.Settings;
 using SqlSugar;
 using Wizstar.Mcp;
 
@@ -110,6 +112,12 @@ if (string.IsNullOrWhiteSpace(mySqlConnectionString))
 // SqlSugarClient 单例在并发请求下会复用同一 MySqlConnection；改用 SqlSugarScope 隔离连接。
 builder.Services.AddSingleton<ISqlSugarClient>(_ => DbInitializer.CreateScopeClient(mySqlConnectionString));
 
+// ── 平台级运行时配置（sys_risk_policy KV）：风控等级策略 + 环境开关 ──────────────
+builder.Services.AddSingleton(sp => new RuntimeSettingsStore(
+    sp.GetRequiredService<ISqlSugarClient>(),
+    msg => sp.GetRequiredService<ILogger<RuntimeSettingsStore>>().LogWarning("{Message}", msg)));
+builder.Services.AddSingleton<IRiskPolicyProvider, DbRiskPolicyProvider>();
+
 // ── LLM 动态配置：系统设置页写入 → 运行时热切 live/offline ──────────────────────
 // 主密钥留空时由 ApiKeyProtector 派生本机开发值；生产环境用 WIZSTAR_MASTER_KEY 注入。
 builder.Services.AddSingleton(_ => new LlmRuntimeDefaults(
@@ -135,6 +143,8 @@ app.MapMcpEndpoints();
 app.MapOperationsEndpoints();
 app.MapUiEndpoints();
 app.MapLlmEndpoints();
+app.MapBusinessEndpoints();
+app.MapSettingsEndpoints();
 
 // ── 健康检查（含账本自检；失败 503，不阻塞其余端点）────────────────────────────
 app.MapGet("/api/health", async (OperationLedger ledger, ChatClientProvider chat, AgentCatalog catalog, McpCatalog mcp, CancellationToken ct) =>
@@ -219,10 +229,14 @@ catch (Exception ex)
 
 try
 {
+    // 「启动自动握手 MCP 服务」开关：关闭时只登记清单不建连（系统设置页可改，重启生效）
+    var runtimeSettings = app.Services.GetRequiredService<RuntimeSettingsStore>();
+    var autoHandshake = runtimeSettings.GetFlag(RuntimeSettingsStore.ToggleKey("auto-handshake"), true);
+
     var summary = await app.Services.GetRequiredService<McpReconciler>()
-        .ReconcileAsync(app.Lifetime.ApplicationStopping).ConfigureAwait(false);
-    logger.LogInformation("MCP 对账完成: 新增={Added} 刷新={Refreshed} 移除={Removed} 失败={Failed}",
-        summary.Added, summary.Refreshed, summary.Removed, summary.Failed);
+        .ReconcileAsync(app.Lifetime.ApplicationStopping, autoHandshake).ConfigureAwait(false);
+    logger.LogInformation("MCP 对账完成: 新增={Added} 刷新={Refreshed} 移除={Removed} 失败={Failed} 自动握手={AutoHandshake}",
+        summary.Added, summary.Refreshed, summary.Removed, summary.Failed, autoHandshake);
 }
 catch (Exception ex)
 {

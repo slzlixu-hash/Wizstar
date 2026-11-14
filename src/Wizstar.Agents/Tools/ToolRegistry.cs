@@ -1,5 +1,3 @@
-using Wizstar.Contracts;
-
 namespace Wizstar.Agents.Tools;
 
 /// <summary>解析后的注册条目：描述符 + 供给器 + 模型可见函数名。</summary>
@@ -8,14 +6,13 @@ public sealed record RegisteredTool(ToolDescriptor Descriptor, IToolProvider Pro
 /// <summary>
 /// 工具注册表：把所有 IToolProvider 的工具按 Agent 的通配授权清单装配成函数集。
 ///
-/// 硬口径（沿用 v2.0 三条硬口径之一）：单次运行工具数硬上限 8，超限直接拒绝启动，
-/// 绝不静默截断——工具太多会撑爆大模型 Context（规范 §3：大模型注意力保护）。
+/// 2026-11-13 起取消「单次运行工具数硬上限」（原 MaxToolsPerRun）：装配范围完全由
+/// agents.yaml 的 allowedTools 授权清单决定，本类只做通配匹配与模型函数名去重，
+/// 不再因数量超限拒绝启动。工具可见面的收敛责任前移到授权配置；单个 MCP 服务的
+/// 语义工具数仍建议遵守规范 §3 的 ≤10（那是服务侧约定，不是平台硬约束）。
 /// </summary>
 public sealed class ToolRegistry(IEnumerable<IToolProvider> providers, ILogger<ToolRegistry> logger)
 {
-    /// <summary>单次运行工具数硬上限。</summary>
-    public const int MaxToolsPerRun = 8;
-
     private readonly IToolProvider[] _providers = providers.ToArray();
 
     /// <summary>
@@ -56,20 +53,12 @@ public sealed class ToolRegistry(IEnumerable<IToolProvider> providers, ILogger<T
                 continue;
             }
 
-            // 硬上限：超出直接拒绝启动，不静默截断
-            if (selected.Count + 1 > MaxToolsPerRun)
-            {
-                throw ApiException.Validation(
-                    $"Agent {agent.Key} 装配工具数超过硬上限 {MaxToolsPerRun}（当前 {selected.Count + 1}），拒绝启动。" +
-                    "请收窄 allowedTools 授权范围");
-            }
-
             selected.Add(new RegisteredTool(descriptor, provider, modelName));
         }
 
         logger.LogInformation(
-            "Agent 工具装配完成: agent={AgentKey} 工具={Count}/{Limit} ({Tools})",
-            agent.Key, selected.Count, MaxToolsPerRun,
+            "Agent 工具装配完成: agent={AgentKey} 工具={Count} ({Tools})",
+            agent.Key, selected.Count,
             string.Join(", ", selected.Select(t => t.ModelName)));
 
         return selected;

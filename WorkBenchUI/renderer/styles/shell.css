@@ -1374,12 +1374,32 @@
 
 .modal {
   width: min(520px, calc(100vw - 80px));
+  /* 内容超高时弹框自身限高，正文单点滚动（避免弹框被裁掉顶部/底部） */
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius-xl);
   border: 1px solid var(--line-strong);
   background: linear-gradient(178deg, #131d33, #0b1220);
   box-shadow: var(--shadow-pop);
   padding: 24px 26px;
   animation: wb-fade-up 0.28s var(--ease) both;
+}
+
+.modal-title,
+.modal-desc,
+.modal-foot {
+  flex: none;
+}
+
+/* 弹框正文：唯一滚动容器（内部表单不要再自带 overflow，否则会叠出错位滚动条） */
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  margin-right: -6px;
 }
 
 .modal-title {

@@ -7,7 +7,7 @@ namespace Wizstar.Api.Endpoints;
 
 /// <summary>
 /// 前端启动引导端点：一次返回 health / agents / mcp 快照，供 WorkBenchUI 首屏预取。
-/// 只读聚合，不改变任何治理、审批、账本口径；失败时前端自动回退演示数据。
+/// 只读聚合，不改变任何治理、审批、账本口径；失败时前端整站进入离线重试页，不回退演示数据。
 /// </summary>
 public static class UiEndpoints
 {
