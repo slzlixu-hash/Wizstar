@@ -210,7 +210,7 @@ export function createRealAdapter() {
       }
       throw new ContractError(
         ERROR_CODES.BUSINESS_REJECTED,
-        `下单网关 ${gateway} 尚未实现适配：请在 tools/1688-mcp/src/adapters/real.js 中接入真实采购接口`,
+        `下单网关 ${gateway} 尚未实现适配：请在 tools/mcp-1688/src/adapters/real.js 中接入真实采购接口`,
       );
     },
 

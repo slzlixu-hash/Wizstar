@@ -21,7 +21,7 @@ import { openLedger } from './ledger/db.js';
 import { createCredentialRegistry } from './security/credentials.js';
 import { closeBrowser } from './browser.js';
 
-const log = (...a) => console.error('[1688-mcp]', ...a);
+const log = (...a) => console.error('[mcp-1688]', ...a);
 
 let ledger = null;
 let credentials = null;
@@ -63,6 +63,7 @@ async function main() {
 
   log(`ready · mode=${adapters.mode} · listen=${httpServer.url}`);
   log(`probe · GET http://${HTTP.host}:${HTTP.port}/healthz`);
+  log(`auth · ${Object.keys(AUTH.keys).length ? 'mcp-hmac/bearer（keyIds=' + Object.keys(AUTH.keys).join(',') + '）' : '本机开发模式·免鉴权'} · loopbackBypass=${AUTH.loopbackBypass ? 'on' : 'off'}`);
   log(`ledger · ${LEDGER.path}`);
   log(`limits · concurrency=${LIMITS.maxConcurrency} timeout=${LIMITS.toolTimeoutMs}ms retention=${LEDGER.retentionDays}d`);
   if (MOCK_MODE) log('mock 模式：全部上游调用走本地夹具，不会访问 1688');

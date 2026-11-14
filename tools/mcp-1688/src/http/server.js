@@ -153,6 +153,7 @@ export function createHttpServer({ adapters, ledger, credentials, auth, logger =
     } catch {
       entries = -1;
     }
+    const authKeyIds = Object.keys(AUTH.keys);
     const payload = {
       status: 'ok',
       server: SERVER_INFO,
@@ -161,6 +162,13 @@ export function createHttpServer({ adapters, ledger, credentials, auth, logger =
       uptimeMs: now - startedAt,
       startedAt: new Date(startedAt).toISOString(),
       mode: stats.adapterMode,
+      // 鉴权口径（只暴露 keyId，不暴露 secret）：便于平台侧核对握手配置
+      auth: {
+        mode: authKeyIds.length ? 'hmac' : 'open',
+        modes: authKeyIds.length ? ['mcp-hmac', 'bearer'] : ['none'],
+        keyIds: authKeyIds,
+        loopbackBypass: AUTH.loopbackBypass ? 'on' : 'off',
+      },
       ledger: { entries, retentionDays: LEDGER.retentionDays },
       credentials: { shops: credentials.size() },
       concurrency: { active: state.active, max: LIMITS.maxConcurrency },
@@ -206,7 +214,7 @@ export function createHttpServer({ adapters, ledger, credentials, auth, logger =
     });
     if (!verified.ok) {
       sendJsonRpcError(res, 401, verified.code, verified.message, { traceId });
-      logger.warn?.(`[1688-mcp] 鉴权失败 code=${verified.code} trace=${traceId}`);
+      logger.warn?.(`[mcp-1688] 鉴权失败 code=${verified.code} trace=${traceId}`);
       return;
     }
 
@@ -275,14 +283,14 @@ export function createHttpServer({ adapters, ledger, credentials, auth, logger =
       await transport.handleRequest(req, res, parsedBody);
     } catch (e) {
       const ce = normalizeUpstreamError(e);
-      logger.error?.(`[1688-mcp] MCP 请求处理异常 code=${ce.code} trace=${traceId}：${ce.message}`);
+      logger.error?.(`[mcp-1688] MCP 请求处理异常 code=${ce.code} trace=${traceId}：${ce.message}`);
       sendJsonRpcError(res, 500, ce.code, ce.message, { traceId });
     } finally {
       const ms = Number(process.hrtime.bigint() - t0) / 1e6;
       const method = Array.isArray(parsedBody) ? 'batch' : parsedBody?.method;
       const toolName = method === 'tools/call' ? parsedBody?.params?.name : '';
       logger.info?.(
-        `[1688-mcp] POST /mcp 200 ${ms.toFixed(1)}ms method=${method || '-'}${toolName ? ` tool=${toolName}` : ''} ${
+        `[mcp-1688] POST /mcp 200 ${ms.toFixed(1)}ms method=${method || '-'}${toolName ? ` tool=${toolName}` : ''} ${
           shopKey ? `shop=${shopKey} ` : ''
         }trace=${traceId}`,
       );

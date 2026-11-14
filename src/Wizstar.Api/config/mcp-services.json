@@ -8,8 +8,8 @@
       "autoStart": true,
       "url": "http://127.0.0.1:5206"
     },
-    "1688-mcp": {
-      "name": "1688",
+    "mcp-1688": {
+      "name": "1688 采购（本地）",
       "transport": "http",
       "authType": "none",
       "builtin": true,

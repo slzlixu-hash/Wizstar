@@ -9,7 +9,6 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const home = os.homedir();
@@ -21,9 +20,12 @@ const int = (v, def) => {
   return Number.isFinite(n) ? n : def;
 };
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+// 包根目录（src 的上一级）：账本/凭证等运行期数据落在包内 .data/，随包 .gitignore 忽略
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Chrome profile：优先复用 1688-cli 的登录态 */
+/** Chrome profile：优先复用 1688-cli 的登录态。
+ *  目录名沿用历史路径 `~/.1688-mcp/profile`（浏览器登录态在这里，改名会导致重新登录），
+ *  与服务改名 mcp-1688 无关。 */
 export const PROFILE_DIR =
   process.env.Z1688_PROFILE_DIR ||
   (fs.existsSync(cliProfile) ? cliProfile : path.join(home, '.1688-mcp', 'profile'));
@@ -64,7 +66,10 @@ export const HTTP = Object.freeze({
 /**
  * HMAC 密钥表：`MCP_HMAC_KEYS` 为 JSON（{ keyId: secret }），
  * 或 `MCP_HMAC_KEY` 单密钥（keyId=default）。
- * 开发环境未配置时生成随机 dev 密钥（进程内有效，重启失效），并打印警告。
+ *
+ * 未配置密钥 → 本机开发模式（免鉴权），与 mcp-douyin-compass 口径一致：
+ * 服务默认只绑 127.0.0.1，平台/Inspector 可直接握手，即插即用。
+ * 生产环境必须显式配置密钥（并把 MCP_HOST 保持回环或放到网关后面）。
  */
 function loadHmacKeys() {
   const raw = process.env.MCP_HMAC_KEYS;
@@ -84,12 +89,11 @@ function loadHmacKeys() {
   if (process.env.MCP_HMAC_KEY) {
     return { keys: { default: process.env.MCP_HMAC_KEY }, dev: false, warning: null };
   }
-  const devSecret = crypto.randomBytes(32).toString('base64url');
   return {
-    keys: { dev: devSecret },
+    keys: {},
     dev: true,
     warning:
-      '未配置 MCP_HMAC_KEYS / MCP_HMAC_KEY，已生成进程内随机 dev 密钥。生产环境必须显式配置！',
+      '未配置 MCP_HMAC_KEYS / MCP_HMAC_KEY：已进入本机开发模式（免鉴权）。生产环境必须显式配置密钥。',
   };
 }
 

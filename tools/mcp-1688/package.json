@@ -1,11 +1,11 @@
 {
-  "name": "1688-mcp",
+  "name": "mcp-1688",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "MAF 架构下的 1688 采购 MCP 服务：Streamable HTTP + MCP-HMAC 鉴权 + 本地幂等账本，把 1688 浏览器/接口能力包装成可审计、可重放的语义工具。",
   "bin": {
-    "1688-mcp": "src/index.js"
+    "mcp-1688": "src/index.js"
   },
   "scripts": {
     "start": "node src/index.js",

@@ -25,17 +25,23 @@ MAF Agent ──JSON-RPC 2.0 / Streamable HTTP──▶ POST /mcp
 要求 **Node.js ≥ 22.5**（依赖内置 `node:sqlite`）。
 
 ```bash
-cd tools/1688-mcp
+cd tools/mcp-1688
 npm install
 
-# 用 mock 适配器起服务（离线、不启动 Chrome，适合联调/演示）
-MCP_1688_MOCK=1 MCP_HMAC_KEYS='{"dev":"dev-secret"}' npm start
+# 本机开发模式：不配密钥 = 免鉴权（只绑 127.0.0.1），平台可直接握手
+npm start
+
+# mock 适配器（离线、不启动 Chrome，适合联调/演示）
+MCP_1688_MOCK=1 npm start
+
+# 生产/跨机部署：显式配置密钥（启用 MCP-HMAC + Bearer 两档）
+MCP_HMAC_KEYS='{"dev":"dev-secret"}' npm start
 ```
 
 启动后：
 
 ```bash
-curl -s http://127.0.0.1:5207/healthz            # 探活，<50ms，无副作用
+curl -s http://127.0.0.1:5207/healthz            # 探活，<50ms，无副作用（含 auth 口径）
 npm run sign -- --key-id dev --secret dev-secret \
   --body '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' --curl
 ```
@@ -86,8 +92,9 @@ MCP_HMAC_KEYS='{"dev":"dev-secret"}' npm start
 - 协议版本：强制支持 `2025-06-18`，兼容 `2025-03-26`（由 `mcp-protocol-version` 头协商）。
 - 其余方法/路径：非 `POST` 的 `/mcp` → `405`，未知路径 → `404`。
 
-鉴权三档（自上而下短路）：
+鉴权口径（自上而下短路）：
 
+0. **未配置密钥**：本机开发模式，免鉴权（与 mcp-douyin-compass 一致；默认只绑 127.0.0.1）。
 1. **回环免签**：请求来自 `127.0.0.1` / `::1` 时直接放行（默认开；对外监听时用
    `MCP_AUTH_LOOPBACK_BYPASS=0` 关闭）。
 2. **Bearer 静态令牌**（第三方快速接入，免算签名）：
@@ -254,7 +261,7 @@ npm run test:unit
 ## 8. 目录结构
 
 ```
-tools/1688-mcp/
+tools/mcp-1688/
 ├── src/
 │   ├── index.js                 # 启动入口：账本/凭证/适配器/HTTP/优雅退出
 │   ├── config.js                # 全部环境变量与默认值（含旧版浏览器参数）

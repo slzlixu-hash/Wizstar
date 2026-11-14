@@ -199,6 +199,11 @@ export function createAuth({ keys = {}, toleranceSec = 300, nonceTtlSec = 600, l
   function verify(req = {}) {
     const { method, path, headers, rawBody = '', remoteAddress } = req;
 
+    // 0) 未配置任何密钥：本机开发模式（免鉴权），与 mcp-douyin-compass 口径一致
+    if (Object.keys(keyTable).length === 0) {
+      return { ok: true, keyId: 'open', ts: 0, nonce: '' };
+    }
+
     // 1) 回环豁免：本机 / 同机进程直连，防重放防篡改无对象，直接放行
     if (loopbackBypass && isLoopbackAddress(remoteAddress)) {
       return { ok: true, keyId: 'local-trust', ts: 0, nonce: '' };

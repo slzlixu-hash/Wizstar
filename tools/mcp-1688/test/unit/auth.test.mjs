@@ -434,3 +434,27 @@ test('回环豁免：loopbackBypass=false 时回环请求也必须走验签（�
     auth.close();
   }
 });
+
+test('未配置密钥：本机开发模式免鉴权（与罗盘口径一致，便于平台直接握手）', () => {
+  const auth = createAuth({ keys: {}, now: () => NOW_SEC * 1000 });
+  try {
+    const anonymous = auth.verify({
+      method: 'POST', path: PATH, headers: {}, rawBody: BODY, remoteAddress: '10.0.0.8',
+    });
+    assert.equal(anonymous.ok, true);
+    assert.equal(anonymous.keyId, 'open');
+  } finally {
+    auth.close();
+  }
+});
+
+test('未配置密钥 + 显式 loopbackBypass=false：仍按开发模式放行（无密钥可验）', () => {
+  const auth = createAuth({ keys: {}, loopbackBypass: false, now: () => NOW_SEC * 1000 });
+  try {
+    const r = auth.verify({ method: 'POST', path: PATH, headers: {}, rawBody: BODY, remoteAddress: '127.0.0.1' });
+    assert.equal(r.ok, true);
+    assert.equal(r.keyId, 'open');
+  } finally {
+    auth.close();
+  }
+});

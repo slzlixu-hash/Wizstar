@@ -226,7 +226,7 @@ export const TOOLS = [
       }
       if (!a.keywords && !a.offerIds) {
         // 没给候选范围时，直接在服务端候选池（例如默认搜索页）上过滤，MAF 只需传筛选条件
-        ctx.log?.info?.('[1688-mcp] filter_suppliers 未指定 keywords/offerIds，使用服务端候选池', { limit: a.limit ?? 10 });
+        ctx.log?.info?.('[mcp-1688] filter_suppliers 未指定 keywords/offerIds，使用服务端候选池', { limit: a.limit ?? 10 });
       }
       const filters = resolveFilters({ preset: a.preset, filters: a.filters });
       const limit = a.limit ?? 10;
