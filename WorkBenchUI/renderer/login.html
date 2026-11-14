@@ -344,7 +344,7 @@
                       <path d="m5 12.5 4.2 4.2L19 6.8" />
                     </svg>
                   </span>
-                  <span>记住账号并自动登录</span>
+                  <span>记住账号和密码</span>
                 </label>
 
                 <button type="submit" class="login-submit" id="login-submit">
@@ -368,7 +368,7 @@
 
     <script src="js/icons.js"></script>
     <script src="js/data.js"></script>
-    <script src="js/api-client.js"></script>
+    <!-- 登录页不拉业务数据（/api/* 需登录令牌），因此不加载 api-client.js -->
     <script src="js/components.js"></script>
     <script src="js/login.js"></script>
   </body>

@@ -1,16 +1,19 @@
 'use strict';
 
 /**
- * 登录页交互（纯界面阶段）：
+ * 登录页交互（真实鉴权）：
  *  - 文案 / 版本 / 端口从 WB.data.app 读取，不在页面里硬编码业务数据
  *  - 标题栏：最小化 / 关闭走 preload 注入的 window.workbench
- *  - 表单：空值红边 + 抖动 + toast；回车提交；眼睛切换密码可见；记住账号
- *  - 登录调用 window.workbench.login()，非 Electron 环境给出提示且不抛错
+ *  - 表单：空值红边 + 抖动 + toast；回车提交；眼睛切换密码可见；记住账号和密码
+ *  - 提交调用 window.workbench.login(username, password, remember) → 主进程请求 /api/auth/login，
+ *    成功才切主窗口；失败把服务端文案（账号或密码错误 / 账号已停用）原样提示
+ *  - 「记住账号和密码」由主进程用 safeStorage 加密落盘，本页只负责读取预填
  */
 (function () {
   const WB = window.WB || {};
   const app = (WB.data && WB.data.app) || {};
   const bridge = window.workbench || null;
+  const LEGACY_REMEMBER_KEY = 'wizstar.login.username';
 
   const $ = (id) => document.getElementById(id);
 
@@ -63,6 +66,38 @@
   const submitBtn = $('login-submit');
   const submitLabel = submitBtn ? submitBtn.querySelector('.login-submit-label') : null;
   const eyeBtn = $('login-eye');
+  const rememberInput = $('login-remember-input');
+
+  /* 记住账号和密码：凭据由主进程 safeStorage 加密保存，这里只负责预填。
+     旧版本只记账号（localStorage），顺手清掉避免残留。 */
+  try {
+    window.localStorage.removeItem(LEGACY_REMEMBER_KEY);
+  } catch (_) {
+    /* file:// 下 localStorage 不可用时忽略 */
+  }
+
+  if (bridge && typeof bridge.getRemembered === 'function') {
+    Promise.resolve()
+      .then(() => bridge.getRemembered())
+      .then((cred) => {
+        if (!cred || !cred.ok) return;
+        if (accountInput) accountInput.value = cred.username || '';
+        if (passwordInput) passwordInput.value = cred.password || '';
+        if (rememberInput) rememberInput.checked = true;
+        // 账号密码都已预填：焦点给登录按钮，回车直接提交
+        if (submitBtn) submitBtn.focus();
+      })
+      .catch(() => {
+        /* 读取失败按「未记住」处理 */
+      });
+  }
+
+  /* 会话过期 / 被动退出提示（由主进程推来） */
+  if (bridge && typeof bridge.onAuthNotice === 'function') {
+    bridge.onAuthNotice(function (message) {
+      if (message) toast(message, 'info');
+    });
+  }
 
   const fields = {
     account: $('login-field-user'),
@@ -130,15 +165,26 @@
 
       submitting = true;
       setLoading(true);
-      window.setTimeout(() => {
-        try {
-          bridge.login();
-        } catch (err) {
+      const remember = !!(rememberInput && rememberInput.checked);
+
+      Promise.resolve()
+        .then(() => bridge.login(account, password, remember))
+        .then((res) => {
+          if (res && res.ok) {
+            // 主进程即将切到主窗口，当前页面销毁，保持 loading 态即可
+            return;
+          }
+          submitting = false;
+          setLoading(false);
+          raiseError('password');
+          if (passwordInput) passwordInput.select();
+          toast((res && res.error) || '账号或密码错误', 'error');
+        })
+        .catch(() => {
           submitting = false;
           setLoading(false);
           toast('登录请求失败，请稍后重试', 'error');
-        }
-      }, 260);
+        });
     });
   }
 

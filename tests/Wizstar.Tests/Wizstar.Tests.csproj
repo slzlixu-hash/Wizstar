@@ -22,6 +22,8 @@
     <ProjectReference Include="..\..\src\Wizstar.Contracts\Wizstar.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Wizstar.Agents\Wizstar.Agents.csproj" />
     <ProjectReference Include="..\..\src\Wizstar.Mcp\Wizstar.Mcp.csproj" />
+    <!-- 登录鉴权（PasswordHasher / AuthTokenService / AuthService）单测 -->
+    <ProjectReference Include="..\..\src\Wizstar.Api\Wizstar.Api.csproj" />
   </ItemGroup>
 
 </Project>

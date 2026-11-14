@@ -12,6 +12,24 @@
 
 const API_BASE = process.env.WIZSTAR_API_BASE || 'http://127.0.0.1:5301';
 
+/**
+ * 登录令牌由主进程持有（渲染进程 sandbox 下拿不到也存不住），
+ * 每个 API 请求转发时注入 `Authorization: Bearer <token>`。
+ */
+let authToken = '';
+
+function setAuthToken(token) {
+  authToken = typeof token === 'string' ? token : '';
+}
+
+function clearAuthToken() {
+  authToken = '';
+}
+
+function getAuthToken() {
+  return authToken;
+}
+
 // 本机常驻 HTTP_PROXY（如 127.0.0.1:55109）。Node 全局 fetch（undici）会默认把
 // 127.0.0.1 的请求也转给该代理，导致本地回环被转成绝对地址（404 / 串服务），
 // 与 Wizstar.Api 端的 LoopbackBypassProxy 是同一个坑。这里让发往本地后端的请求直连，
@@ -65,6 +83,7 @@ async function callApi(method, apiPath, body) {
   }
 
   const headers = { Accept: 'application/json' };
+  if (authToken) headers.Authorization = 'Bearer ' + authToken;
   const init = { method: verb, headers };
   if (verb !== 'GET' && body !== undefined && body !== null) {
     headers['Content-Type'] = 'application/json';
@@ -90,15 +109,39 @@ async function callApi(method, apiPath, body) {
   }
 }
 
-function registerApiProxy(ipcMain) {
+function registerApiProxy(ipcMain, options = {}) {
+  const onUnauthorized = typeof options.onUnauthorized === 'function' ? options.onUnauthorized : null;
+
+  /** 统一转发：401 时通知宿主（主进程）回到登录窗口，渲染层仍收到原始结果。 */
+  async function forward(method, apiPath, body) {
+    const result = await callApi(method, apiPath, body);
+    if (result && result.status === 401 && onUnauthorized) {
+      try {
+        onUnauthorized(result);
+      } catch (_) {
+        /* 宿主处理失败不影响本次请求结果回传 */
+      }
+    }
+    return result;
+  }
+
   // A1 兼容通道
-  ipcMain.handle('api:get', async (_event, apiPath) => callApi('GET', apiPath, null));
+  ipcMain.handle('api:get', (_event, apiPath) => forward('GET', apiPath, null));
 
   // A2 通用读写通道（系统设置 → 模型与 API Key）
-  ipcMain.handle('api:request', async (_event, payload) => {
+  ipcMain.handle('api:request', (_event, payload) => {
     const p = payload || {};
-    return callApi(p.method, p.path, p.body);
+    return forward(p.method, p.path, p.body);
   });
 }
 
-module.exports = { registerApiProxy, API_BASE, API_TIMEOUT_MS, API_WRITE_TIMEOUT_MS };
+module.exports = {
+  registerApiProxy,
+  callApi,
+  setAuthToken,
+  clearAuthToken,
+  getAuthToken,
+  API_BASE,
+  API_TIMEOUT_MS,
+  API_WRITE_TIMEOUT_MS,
+};

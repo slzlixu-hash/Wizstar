@@ -24,8 +24,8 @@
       tagline: '多智能体协同 · 驱动矩阵电商全自动闭环',
       version: '—',
       endpoint: '127.0.0.1:5301',
-      // 本地单机运行，无登录体系：用户信息为固定运行标识，不伪造业务账号
-      user: { name: '本机管理员', role: '本地会话', initial: '本' },
+      // 登录后由主进程切换窗口；账号信息不进渲染层静态数据
+      user: { name: '本机管理员', role: '已登录', initial: '本' },
       globalModel: '',
       globalModelLabel: '',
       globalModels: [],

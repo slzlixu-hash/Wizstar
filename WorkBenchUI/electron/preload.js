@@ -20,9 +20,20 @@ contextBridge.exposeInMainWorld('workbench', {
   toggleMaximize: () => ipcRenderer.send('win:toggle-maximize'),
   close: () => ipcRenderer.send('win:close'),
 
-  // 登录 / 退出
-  login: () => ipcRenderer.send('auth:login'),
-  logout: () => ipcRenderer.send('auth:logout'),
+  // 登录 / 退出：login 走 IPC invoke，返回 { ok, user?, error? }
+  // remember=true 时由主进程用 safeStorage 加密保存账号密码（渲染层拿不到已存凭据文件）
+  login: (username, password, remember) =>
+    ipcRenderer.invoke('auth:login', { username, password, remember: !!remember }),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+  me: () => ipcRenderer.invoke('auth:me'),
+  // 「记住账号和密码」预填 / 清除
+  getRemembered: () => ipcRenderer.invoke('auth:remember-get'),
+  forgetRemembered: () => ipcRenderer.invoke('auth:remember-clear'),
+  // 会话过期 / 退出提示（登录页监听）
+  onAuthNotice: (callback) => {
+    if (typeof callback !== 'function') return;
+    ipcRenderer.on('auth:notice', (_event, message) => callback(message));
+  },
 
   // A1 只读代理：resolve 为 { ok, status, body, error? }，永不 reject
   apiGet: (apiPath) => ipcRenderer.invoke('api:get', apiPath),

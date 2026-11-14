@@ -1,5 +1,6 @@
 using SqlSugar;
 using Wizstar.Data.Entities;
+using Wizstar.Data.Entities.Business;
 
 namespace Wizstar.Data;
 
@@ -15,6 +16,8 @@ public static class DbInitializer
         typeof(ApprovalRecord),
         typeof(OperationRecord),
         typeof(LlmAgentBindingRecord),
+        // 登录账号表（sys_user）：首次启动由 AuthService 种子写入默认管理员
+        typeof(SysUser),
     ];
 
     /// <summary>用默认连接串直接初始化（供命令行 / 测试使用）。</summary>

@@ -180,9 +180,15 @@ ui.bind(root, selector, event, handler)            // 批量绑定
 
 - 独立窗口 `renderer/login.html`（1180×720，无侧边栏），自绘标题栏（最小化 / 关闭）。
 - 左侧插画全部内联 SVG + CSS 渐变，不引用外部图片。
-- 右侧玻璃登录卡：账号 / 密码输入框（密码眼睛切换）、记住账号、`立即登录` 渐变大按钮。
-- 卡片下方一行：绿点 `本地服务连接正常 (127.0.0.1:5301)` + 右侧真实版本号（数据层异步补写）。
-- 登录按钮调 `window.workbench.login()`；本期为**本地会话**，不做账号校验。
+- 右侧玻璃登录卡：账号 / 密码输入框（密码眼睛切换）、记住账号和密码、`立即登录` 渐变大按钮。
+- 「记住账号和密码」由主进程 `electron/credentials.js` 用 Electron `safeStorage`（Windows DPAPI）
+  加密落盘到 userData，登录页经 IPC 读取后自动预填；取消勾选并登录成功会清除已存凭据。
+- 卡片下方一行：绿点 `本地服务连接正常 (127.0.0.1:5301)` + 右侧真实版本号。
+- **真实鉴权**：登录按钮调 `window.workbench.login(username, password)` → 主进程请求
+  `POST /api/auth/login`；成功才切主窗口，令牌只留在主进程（`electron/api-proxy.js`），
+  渲染层不可见。默认管理员 `admin / admin123` 由服务端首次启动种子到 `sys_user`。
+- 失败提示沿用服务端文案（`账号或密码错误` / `账号已停用`）：密码框红边 + 抖动 + toast。
+- 主窗口所有 `/api/*` 请求由主进程注入 `Authorization: Bearer <token>`；令牌过期（401）自动回登录页。
 - 空账号/密码 → 输入框红边 + 抖动 + toast；回车提交。
 
 ## 8. 自检清单（提交前逐条确认）

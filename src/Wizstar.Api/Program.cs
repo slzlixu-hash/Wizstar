@@ -118,6 +118,15 @@ builder.Services.AddSingleton(sp => new RuntimeSettingsStore(
     msg => sp.GetRequiredService<ILogger<RuntimeSettingsStore>>().LogWarning("{Message}", msg)));
 builder.Services.AddSingleton<IRiskPolicyProvider, DbRiskPolicyProvider>();
 
+// ── 登录鉴权：sys_user 表 + 无状态令牌 ────────────────────────────────────────
+// 默认管理员 admin / admin123 首次启动自动种子到 sys_user（已存在则不覆盖密码）；
+// 令牌秘钥取 Auth:Secret，留空时按本机机器名/用户名派生稳定密钥（不落仓库）。
+builder.Services.AddSingleton<IUserStore, SqlUserStore>();
+builder.Services.AddSingleton(_ => new AuthTokenService(
+    builder.Configuration["Auth:Secret"],
+    builder.Configuration.GetValue("Auth:TokenHours", 12)));
+builder.Services.AddSingleton<AuthService>();
+
 // ── LLM 动态配置：系统设置页写入 → 运行时热切 live/offline ──────────────────────
 // 主密钥留空时由 ApiKeyProtector 派生本机开发值；生产环境用 WIZSTAR_MASTER_KEY 注入。
 builder.Services.AddSingleton(_ => new LlmRuntimeDefaults(
@@ -133,10 +142,12 @@ builder.Services.AddSingleton<ILlmRuntimeSettingsProvider>(sp => sp.GetRequiredS
 
 var app = builder.Build();
 
-// 顺序：CORS 最外层（错误响应也带 CORS 头）→ 异常统一 → 端点
+// 顺序：CORS 最外层（错误响应也带 CORS 头）→ 异常统一 → 登录态校验 → 端点
 app.UseCors();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<AuthMiddleware>();
 
+app.MapAuthEndpoints();
 app.MapAgentEndpoints();
 app.MapApprovalEndpoints();
 app.MapMcpEndpoints();
@@ -201,6 +212,17 @@ if (builder.Configuration.GetValue("Database:AutoCreateTables", true))
     catch (Exception ex)
     {
         logger.LogWarning(ex, "MySQL 初始化失败（连接串或服务状态问题），持久化能力降级");
+    }
+
+    // 默认管理员种子：admin / admin123（仅补缺，不覆盖已有密码）。
+    // 单独兜底：种子失败不影响其余启动流程，但登录会不可用，日志需明确。
+    try
+    {
+        app.Services.GetRequiredService<AuthService>().EnsureSeed();
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "默认管理员种子失败（登录可能不可用），请检查 sys_user 表结构");
     }
 }
 

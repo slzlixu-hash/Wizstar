@@ -15,7 +15,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { registerApiProxy } = require('../electron/api-proxy');
+const { registerApiProxy, callApi, setAuthToken } = require('../electron/api-proxy');
 
 const ROOT = path.resolve(__dirname, '..');
 const RENDERER = path.join(ROOT, 'renderer');
@@ -28,6 +28,27 @@ app.commandLine.appendSwitch('force-device-scale-factor', '1');
 // A1：截图脚本自身作为主进程，也需注册本地 API 代理，
 // 否则渲染层 apiGet 会报 "No handler registered" 并降级成演示数据。
 registerApiProxy(ipcMain);
+
+/**
+ * 截图前先用默认管理员登录拿令牌（API 已启用登录鉴权）。
+ * 账号可用 WIZSTAR_CAPTURE_USER / WIZSTAR_CAPTURE_PASSWORD 覆盖；
+ * 登录失败不阻断截图，页面会以未登录态（离线空态）产出，便于人工发现。
+ */
+async function loginForCapture() {
+  const username = process.env.WIZSTAR_CAPTURE_USER || 'admin';
+  const password = process.env.WIZSTAR_CAPTURE_PASSWORD || 'admin123';
+  const res = await callApi('POST', '/api/auth/login', { username, password });
+  const data = res && res.body && res.body.data;
+  if (res && res.ok && data && data.token) {
+    setAuthToken(data.token);
+    return true;
+  }
+  console.warn(
+    '[workbench:capture] 登录失败，将以未登录态截图：',
+    (res && (res.error || res.status)) || '未知原因'
+  );
+  return false;
+}
 
 const argv = process.argv.slice(2);
 const onlyArg = argv.find((item) => item.startsWith('--only='));
@@ -101,6 +122,8 @@ function watchErrors(win) {
 
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  await loginForCapture();
 
   const report = { generatedAt: new Date().toISOString(), pages: [] };
   const wanted = (id) => !only || only.includes(id);
