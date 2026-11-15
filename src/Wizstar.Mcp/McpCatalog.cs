@@ -104,6 +104,10 @@ public sealed class McpCatalog(IConfiguration configuration, IHttpClientFactory 
             ? envNode.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? string.Empty)
             : null;
 
+        var headers = node.TryGetProperty("headers", out var headersNode) && headersNode.ValueKind == JsonValueKind.Object
+            ? headersNode.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? string.Empty)
+            : null;
+
         return new McpServiceConfig
         {
             Id = id,
@@ -113,6 +117,7 @@ public sealed class McpCatalog(IConfiguration configuration, IHttpClientFactory 
             Command = node.TryGetProperty("command", out var cmdNode) && cmdNode.ValueKind == JsonValueKind.String ? cmdNode.GetString() : null,
             Args = args,
             Env = env,
+            Headers = headers,
             AutoStart = node.TryGetProperty("autoStart", out var autoNode) && autoNode.ValueKind == JsonValueKind.True,
             Builtin = node.TryGetProperty("builtin", out var builtinNode) && builtinNode.ValueKind == JsonValueKind.True,
             AuthType = Get("authType"),
@@ -249,6 +254,30 @@ public sealed class McpCatalog(IConfiguration configuration, IHttpClientFactory 
                 foreach (var pair in config.Env) env[pair.Key] = pair.Value;
                 node["env"] = env;
             }
+
+            // 自定义请求头：值不回显，空值沿用旧值；未提交（null）则整组沿用旧配置。
+            var previousHeaders = previous?["headers"] as JsonObject;
+            if (config.Headers is not null)
+            {
+                var headers = new JsonObject();
+                foreach (var pair in config.Headers)
+                {
+                    var key = (pair.Key ?? string.Empty).Trim();
+                    if (key.Length == 0 || key.Contains('\r') || key.Contains('\n')) continue;
+                    var value = pair.Value ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(value) || value == "••••••" || value == "******")
+                    {
+                        value = previousHeaders?[key]?.GetValue<string>() ?? string.Empty;
+                    }
+                    if (value.Contains('\r') || value.Contains('\n')) continue;
+                    if (value.Length > 0) headers[key] = value;
+                }
+                if (headers.Count > 0) node["headers"] = headers;
+            }
+            else if (previousHeaders is not null)
+            {
+                node["headers"] = previousHeaders.DeepClone();
+            }
             if (authType == McpAuthTypes.Header && !string.IsNullOrWhiteSpace(headerName)) node["authHeaderName"] = headerName;
             if (builtin) node["builtin"] = true;
             if (!string.IsNullOrWhiteSpace(keyId)) node["authKeyId"] = keyId;
@@ -381,7 +410,11 @@ public sealed class McpCatalog(IConfiguration configuration, IHttpClientFactory 
         return new McpJsonRpcClient(id, config, httpFactory.CreateClient("mcp"), logger);
     }
 
-    public IReadOnlyList<McpServiceSnapshot> ListSnapshots()
+    /// <summary>临时客户端：用于管理界面「探活 &amp; 抓取 Schema」，不写入清单、不占用运行时状态槽。</summary>
+    public McpJsonRpcClient CreateProbeClient(McpServiceConfig config) =>
+        new(config.Id, config, httpFactory.CreateClient("mcp"), logger);
+
+    public IReadOnlyList<McpServiceSnapshot> ListSnapshots(bool includeUnconfigured = false)
     {
         ReloadIfChanged();
         lock (_lock)
@@ -390,6 +423,13 @@ public sealed class McpCatalog(IConfiguration configuration, IHttpClientFactory 
             foreach (var (id, state) in _states)
             {
                 var cfg = _configs.GetValueOrDefault(id);
+                // 已从清单删除的服务仍保留运行时状态（只停用不删数据），但管理列表不再返回；
+                // 对账循环传 includeUnconfigured=true 才能看到并收口这些残留状态。
+                if (cfg is null && !includeUnconfigured)
+                {
+                    continue;
+                }
+
                 snapshots.Add(new McpServiceSnapshot(
                     id,
                     cfg?.Name ?? id,
@@ -408,7 +448,8 @@ public sealed class McpCatalog(IConfiguration configuration, IHttpClientFactory 
                     !string.IsNullOrWhiteSpace(cfg?.AuthSecret),
                     cfg?.EffectiveAuthType ?? McpAuthTypes.None,
                     cfg?.AuthHeaderName,
-                    cfg?.Builtin ?? false));
+                    cfg?.Builtin ?? false,
+                    cfg?.Headers?.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList()));
             }
 
             return snapshots;

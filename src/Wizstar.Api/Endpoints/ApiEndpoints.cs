@@ -3,11 +3,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
+using SqlSugar;
 using Wizstar.Agents.Governance;
 using Wizstar.Agents.Ledger;
 using Wizstar.Agents.Profiles;
 using Wizstar.Agents.Runtime;
+using Wizstar.Api.Services;
 using Wizstar.Contracts;
+using Wizstar.Data.Entities;
 using Wizstar.Mcp;
 
 namespace Wizstar.Api.Endpoints;
@@ -38,6 +41,9 @@ public static class AgentEndpoints
                 enabled = profile.Enabled,
                 maxSteps = profile.MaxSteps,
                 allowedTools = profile.AllowedTools,
+                avatar = profile.AvatarName,
+                tone = profile.Tone,
+                quickPrompts = profile.QuickPromptList,
                 systemPromptPreview = profile.SystemPrompt.Length > 120
                     ? profile.SystemPrompt[..120] + "…"
                     : profile.SystemPrompt
@@ -114,7 +120,97 @@ public static class AgentEndpoints
                 enabled = profile.Enabled,
                 maxSteps = profile.MaxSteps,
                 allowedTools = profile.AllowedTools,
+                avatar = profile.AvatarName,
+                tone = profile.Tone,
+                quickPrompts = profile.QuickPromptList,
                 systemPrompt = profile.SystemPrompt,
+            }, string.Empty));
+        });
+
+        /* Agent 级 MCP 工具切片：读取该 Agent 的精确授权覆盖。 */
+        group.MapGet("/{key}/mcp-slices", (string key, AgentCatalog catalog, AgentMcpPolicyStore store) =>
+        {
+            var profile = catalog.Find(key);
+            if (profile is null)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"名册中不存在 Agent: {key}", string.Empty));
+            }
+
+            return Results.Ok(ApiEnvelope<object>.Ok(new
+            {
+                agentKey = profile.Key,
+                slices = store.GetAgentSlices(profile.Key),
+            }, string.Empty));
+        });
+
+        /* 保存某个 MCP 服务的精确工具切片；未配置的其他服务继续沿用 agents.yaml 默认授权。 */
+        group.MapPut("/{key}/mcp-slices/{serverId}", (
+            string key,
+            string serverId,
+            McpSliceRequest? request,
+            AgentCatalog catalog,
+            McpCatalog mcp,
+            AgentMcpPolicyStore store) =>
+        {
+            var profile = catalog.Find(key);
+            if (profile is null)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"名册中不存在 Agent: {key}", string.Empty));
+            }
+
+            var normalizedServerId = McpCatalog.NormalizeId(serverId);
+            if (mcp.GetConfig(normalizedServerId) is null)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"清单中未声明 MCP 服务: {normalizedServerId}", string.Empty));
+            }
+
+            var tools = request?.Tools ?? [];
+            if (tools.Count > 2000)
+            {
+                return Results.BadRequest(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, "单个服务的工具切片不能超过 2000 个", string.Empty));
+            }
+
+            var saved = store.SetSlice(profile.Key, normalizedServerId, tools);
+            return Results.Ok(ApiEnvelope<object>.Ok(new
+            {
+                agentKey = profile.Key,
+                serverId = normalizedServerId,
+                tools = saved,
+            }, string.Empty));
+        });
+
+        /* 重置某个服务的切片：删除覆盖，运行时回到 agents.yaml 默认授权。 */
+        group.MapDelete("/{key}/mcp-slices/{serverId}", (
+            string key,
+            string serverId,
+            AgentCatalog catalog,
+            McpCatalog mcp,
+            AgentMcpPolicyStore store) =>
+        {
+            var profile = catalog.Find(key);
+            if (profile is null)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"名册中不存在 Agent: {key}", string.Empty));
+            }
+
+            var normalizedServerId = McpCatalog.NormalizeId(serverId);
+            if (mcp.GetConfig(normalizedServerId) is null)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"清单中未声明 MCP 服务: {normalizedServerId}", string.Empty));
+            }
+
+            var cleared = store.ClearSlice(profile.Key, normalizedServerId);
+            return Results.Ok(ApiEnvelope<object>.Ok(new
+            {
+                agentKey = profile.Key,
+                serverId = normalizedServerId,
+                cleared,
             }, string.Empty));
         });
 
@@ -123,13 +219,24 @@ public static class AgentEndpoints
             ChatRequest request,
             HttpContext http,
             AgentRunner runner,
-            ConversationStore conversations,
+            IConversationStore conversations,
+            AgentMemoryService memory,
             CancellationToken ct) =>
         {
+            // 显式 tags 优先；聊天未指定时按消息里的规则标签做轻量命中（如「保温杯」）
+            var tags = request.Tags is { Count: > 0 }
+                ? request.Tags
+                : memory.InferTagsFromMessage(key, request.Message);
             var options = new AgentRunOptions(
                 key,
                 conversations.NormalizeConversationId(request.ConversationId),
-                request.Message ?? string.Empty);
+                request.Message ?? string.Empty,
+                (request.Attachments ?? [])
+                    .Where(a => a is not null && !string.IsNullOrWhiteSpace(a.Name))
+                    .Select(a => new AgentAttachment(a.Name!.Trim(), a.Mime, a.Size, a.Text))
+                    .ToList(),
+                tags,
+                request.SkillKey);
 
             // JSON 直连（非流式）：测试与脚本优先
             var accept = http.Request.Headers.Accept.ToString();
@@ -171,7 +278,15 @@ public static class AgentEndpoints
     }
 }
 
-public sealed record ChatRequest(string? Message, string? ConversationId);
+public sealed record ChatRequest(
+    string? Message,
+    string? ConversationId,
+    IReadOnlyList<ChatAttachment>? Attachments = null,
+    IReadOnlyList<string>? Tags = null,
+    string? SkillKey = null);
+
+/// <summary>前端挂载的附件：文本类文件带内容，二进制仅元信息。</summary>
+public sealed record ChatAttachment(string? Name, string? Mime, long Size, string? Text);
 
 /// <summary>
 /// 审批端点（HITL）：列出 / 批准 / 拒绝。
@@ -198,14 +313,31 @@ public static class ApprovalEndpoints
         });
 
         group.MapPost("/{id:guid}/{decision:regex(^(approve|reject)$)}", (
-            IApprovalStore store, Guid id, string decision, [FromBody] DecisionRequest? request) =>
+            IApprovalStore store, Guid id, string decision, [FromBody] DecisionRequest? request, ISqlSugarClient db) =>
         {
             var status = decision == "approve" ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
             var decided = store.Decide(id, status, request?.Note);
-            return decided is null
-                ? Results.Conflict(ApiEnvelope<object>.Fail(
-                    ErrorCodes.BusinessRejected, $"审批单不存在或已决策: {id}", string.Empty))
-                : Results.Ok(ApiEnvelope<object>.Ok(decided, string.Empty));
+            if (decided is null)
+            {
+                return Results.Conflict(ApiEnvelope<object>.Fail(
+                    ErrorCodes.BusinessRejected, $"审批单不存在或已决策: {id}", string.Empty));
+            }
+
+            // 轨迹日志同步审批结果（批准后仍需下一次同参工具调用才真正执行）
+            try
+            {
+                var auditStatus = decision == "approve" ? "approved" : "rejected";
+                db.Ado.ExecuteCommand(
+                    "UPDATE wiz_audit_log SET Status = @status WHERE ApprovalId = @approvalId",
+                    new SugarParameter("@status", auditStatus),
+                    new SugarParameter("@approvalId", id.ToString("D")));
+            }
+            catch (Exception)
+            {
+                // 审计更新失败不阻断审批主流程
+            }
+
+            return Results.Ok(ApiEnvelope<object>.Ok(decided, string.Empty));
         });
     }
 }
@@ -232,6 +364,10 @@ public static class McpEndpoints
             var summary = await reconciler.ReconcileAsync(ct).ConfigureAwait(false);
             return Results.Ok(ApiEnvelope<McpReconcileSummary>.Ok(summary, string.Empty));
         });
+
+        // 在线调试：不写清单、不占运行时状态槽；用当前表单的 URL / 鉴权 / Header 直接握手并抓 tools/list。
+        group.MapPost("/probe", (McpServerUpsertRequest request, McpCatalog catalog, CancellationToken ct) =>
+            ProbeServerAsync(request, catalog, ct));
 
         group.MapPost("/servers/{id}/handshake", async (string id, McpCatalog catalog, McpReconciler reconciler, CancellationToken ct) =>
         {
@@ -266,6 +402,144 @@ public static class McpEndpoints
         // ── 调试辅助：后端生成可直接粘贴的 cURL（密钥不回显前端；HMAC 即签即用，5 分钟有效）──
         group.MapGet("/servers/{id}/debug-curl", (string id, string? tool, McpCatalog catalog) =>
             BuildDebugCurl(id, tool, catalog));
+    }
+
+    private static async Task<IResult> ProbeServerAsync(
+        McpServerUpsertRequest request, McpCatalog catalog, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Url)
+            || !Uri.TryCreate(request.Url.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return Fail(ErrorCodes.ValidationError, "传输地址必须是合法的 http(s) URL", StatusCodes.Status400BadRequest);
+        }
+
+        var id = McpCatalog.NormalizeId(request.Id);
+        if (id.Length == 0)
+        {
+            id = "probe";
+        }
+
+        // 编辑态允许表单不回传密钥：沿用清单中的已有凭证；新建态则必须提供。
+        var existing = catalog.GetConfig(id);
+        var keyId = string.IsNullOrWhiteSpace(request.AuthKeyId) ? existing?.AuthKeyId : request.AuthKeyId.Trim();
+        var secret = string.IsNullOrWhiteSpace(request.AuthSecret) ? existing?.AuthSecret : request.AuthSecret;
+        var authType = McpAuthTypes.Normalize(
+            request.AuthType ?? existing?.AuthType,
+            !string.IsNullOrWhiteSpace(keyId) && !string.IsNullOrWhiteSpace(secret));
+
+        if (authType == McpAuthTypes.Hmac && string.IsNullOrWhiteSpace(keyId))
+        {
+            return Fail(ErrorCodes.ValidationError, "MCP-HMAC 模式需要填写 Key ID", StatusCodes.Status400BadRequest);
+        }
+        if (authType != McpAuthTypes.None && string.IsNullOrWhiteSpace(secret))
+        {
+            return Fail(ErrorCodes.ValidationError, "该鉴权模式需要填写 Key / Secret", StatusCodes.Status400BadRequest);
+        }
+
+        var config = new McpServiceConfig
+        {
+            Id = id,
+            Name = string.IsNullOrWhiteSpace(request.Name) ? existing?.Name ?? id : request.Name.Trim(),
+            Transport = "http",
+            Url = request.Url.Trim(),
+            AutoStart = false,
+            AuthType = authType,
+            AuthKeyId = keyId,
+            AuthSecret = secret,
+            Headers = MergeProbeHeaders(request.Headers, existing?.Headers)
+        };
+
+        var client = catalog.CreateProbeClient(config);
+        try
+        {
+            var info = await client.ConnectAsync(ct).ConfigureAwait(false);
+            var tools = await client.ListToolsAsync(ct).ConfigureAwait(false);
+            return Results.Ok(ApiEnvelope<object>.Ok(new
+            {
+                connected = true,
+                probeId = id,
+                serverName = info.ServerName,
+                serverVersion = info.ServerVersion,
+                protocolVersion = info.ProtocolVersion,
+                toolCount = tools.Count,
+                tools = tools.Select(tool => new
+                {
+                    name = tool.Name,
+                    description = tool.Description,
+                    risk = tool.DeclaredRisk,
+                    inputSchema = TryParseJson(tool.InputSchemaJson)
+                }),
+                raw = new
+                {
+                    initialize = TryParseJson(client.LastInitializeJson),
+                    toolsList = TryParseJson(client.LastToolsListJson)
+                }
+            }, string.Empty));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or McpProtocolException
+            or InvalidOperationException or UriFormatException or JsonException)
+        {
+            return Fail(ErrorCodes.NetworkError, "探活失败：" + ex.Message, StatusCodes.Status502BadGateway);
+        }
+    }
+
+    /// <summary>探活表单的自定义头合并：空值沿用清单旧值，删除的行不再提交。</summary>
+    private static Dictionary<string, string>? MergeProbeHeaders(
+        Dictionary<string, string>? incoming, Dictionary<string, string>? previous)
+    {
+        if (incoming is null)
+        {
+            return previous;
+        }
+
+        var headers = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in incoming)
+        {
+            var key = (pair.Key ?? string.Empty).Trim();
+            if (key.Length == 0 || key.Contains('\r') || key.Contains('\n'))
+            {
+                continue;
+            }
+
+            var value = pair.Value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(value) || value == "••••••" || value == "******")
+            {
+                value = previous is not null && previous.TryGetValue(key, out var old) ? old : string.Empty;
+            }
+            if (value.Contains('\r') || value.Contains('\n'))
+            {
+                continue;
+            }
+            if (value.Length > 0)
+            {
+                headers[key] = value;
+            }
+        }
+
+        return headers;
+    }
+
+    private static JsonElement? TryParseJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static IResult BuildDebugCurl(string id, string? tool, McpCatalog catalog)
@@ -389,7 +663,8 @@ public static class McpEndpoints
         AuthHeaderName = request.AuthHeaderName,
         AuthKeyId = request.AuthKeyId,
         AuthSecret = request.AuthSecret,
-        ShopCredential = request.ShopCredential
+        ShopCredential = request.ShopCredential,
+        Headers = request.Headers
     };
 
     private static IResult? TryUpsert(McpCatalog catalog, McpServiceConfig config)
@@ -601,10 +876,14 @@ public sealed record McpServerUpsertRequest(
     string? AuthKeyId,
     string? AuthSecret,
     string? ShopCredential,
-    bool? Builtin);
+    bool? Builtin,
+    Dictionary<string, string>? Headers = null);
 
 /// <summary>调试直调入参；Arguments 为 JSON 对象，缺省 {}。</summary>
 public sealed record McpToolCallRequest(string? ServerId, string? Name, JsonElement? Arguments);
+
+/// <summary>Agent 工具切片入参：保存某个 MCP 服务下勾选的工具名。</summary>
+public sealed record McpSliceRequest(List<string>? Tools);
 
 /// <summary>
 /// 幂等账本对账端点：按 operationId 反查 / 时间窗口扫描（规范 §6 孤儿对账）。

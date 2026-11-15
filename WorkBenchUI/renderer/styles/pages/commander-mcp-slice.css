@@ -1,0 +1,751 @@
+/* ==========================================================================
+   Agent 工具切片与授权（MCP Tool Slicing）
+   左：全局 MCP 服务；右：当前 Agent 的工具矩阵 / Token 水位 / YAML 快照
+   ========================================================================== */
+
+.cmd-slice {
+  display: grid;
+  grid-template-columns: minmax(250px, 28%) minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ------------------------------ 左侧服务池 ------------------------------ */
+
+.cmd-slice-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 13px;
+  background: linear-gradient(178deg, rgba(17, 26, 44, 0.9), rgba(12, 19, 33, 0.94));
+}
+
+.cmd-slice-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  padding: 11px 11px 9px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cmd-slice-side-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-slice-side-title .ic {
+  flex: none;
+  color: var(--cyan);
+}
+
+.cmd-slice-side-title em {
+  margin-left: 3px;
+  color: var(--text-3);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.cmd-slice-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(34, 211, 238, 0.34);
+  border-radius: 7px;
+  background: rgba(34, 211, 238, 0.07);
+  color: var(--cyan-text);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cmd-slice-new:hover {
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(34, 211, 238, 0.13);
+}
+
+.cmd-slice-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin: 9px 10px;
+  height: 31px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(5, 10, 19, 0.5);
+  color: var(--text-3);
+}
+
+.cmd-slice-search:focus-within {
+  border-color: rgba(34, 211, 238, 0.4);
+}
+
+.cmd-slice-search .input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+}
+
+.cmd-slice-search .input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.cmd-slice-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 9px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cmd-slice-server {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  flex: none;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: linear-gradient(178deg, rgba(17, 26, 44, 0.9), rgba(11, 18, 32, 0.94));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.cmd-slice-server:hover {
+  border-color: rgba(34, 211, 238, 0.34);
+}
+
+.cmd-slice-server.is-on {
+  border-color: rgba(34, 211, 238, 0.6);
+  background: linear-gradient(178deg, rgba(22, 49, 70, 0.92), rgba(11, 25, 42, 0.96));
+  box-shadow: inset 0 0 18px rgba(34, 211, 238, 0.05);
+}
+
+.cmd-slice-server-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #eef4ff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.cmd-slice-server-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-slice-builtin {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.1);
+  color: #c4b5fd;
+  font-size: 8.5px;
+  font-style: normal;
+  line-height: 14px;
+}
+
+.cmd-slice-server-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.cmd-slice-server .cw-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+}
+
+.cmd-slice-server .cw-dot[data-state="online"] { background: #34d399; box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.14); }
+.cmd-slice-server .cw-dot[data-state="offline"] { background: #fb7185; box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.13); }
+.cmd-slice-server .cw-dot[data-state="busy"] { background: #22d3ee; box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.13); }
+.cmd-slice-server .cw-dot[data-state="idle"] { background: #64748b; box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12); }
+
+.cmd-slice-server-url {
+  color: var(--text-3);
+  font-size: 9.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------ 右侧切片台 ------------------------------ */
+
+.cmd-slice-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 13px;
+  background: linear-gradient(178deg, rgba(17, 26, 44, 0.9), rgba(12, 19, 33, 0.94));
+}
+
+.cmd-slice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: none;
+  padding: 11px 14px 8px;
+}
+
+.cmd-slice-title {
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.cmd-slice-sub {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.cmd-slice-sub .mono {
+  color: var(--cyan-text);
+}
+
+.cmd-slice-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cmd-slice-tab {
+  position: relative;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cmd-slice-tab.is-on {
+  color: var(--cyan-text);
+}
+
+.cmd-slice-tab.is-on::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--cyan);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.55);
+}
+
+.cmd-slice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cmd-slice-summary {
+  display: grid;
+  grid-template-columns: auto minmax(190px, 0.9fr) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: end;
+  flex: none;
+}
+
+.cmd-slice-exposed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 10px;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 8px;
+  background: rgba(34, 211, 238, 0.05);
+  white-space: nowrap;
+}
+
+.cmd-slice-exposed > span {
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.cmd-slice-exposed em,
+.cmd-slice-select em,
+.cmd-slice-budget-head em {
+  color: var(--text-3);
+  font-size: 9.5px;
+  font-style: normal;
+}
+
+.cmd-slice-exposed b {
+  color: #a5f3fc;
+  font-family: var(--font-num);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.cmd-slice-select {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.cmd-slice-select > span {
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.cmd-slice-select .select-wrap,
+.cmd-slice-select .select {
+  width: 100%;
+}
+
+.cmd-slice-budget {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.cmd-slice-budget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.cmd-slice-budget-head b {
+  color: var(--text-1);
+  font-family: var(--font-num);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cmd-slice-bar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(124, 160, 214, 0.14);
+}
+
+.cmd-slice-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.24s var(--ease), background 0.24s var(--ease);
+}
+
+.cmd-slice-bar i.is-green { background: linear-gradient(90deg, #10b981, #34d399); }
+.cmd-slice-bar i.is-amber { background: linear-gradient(90deg, #d97706, #fbbf24); }
+.cmd-slice-bar i.is-red { background: linear-gradient(90deg, #e11d48, #fb7185); box-shadow: 0 0 12px rgba(251, 113, 133, 0.45); }
+
+.cmd-slice-warn {
+  color: #fb7185;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.cmd-slice-warn[hidden] {
+  display: none;
+}
+
+.cmd-slice-tool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.cmd-slice-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+}
+
+.cmd-slice-tool {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) minmax(170px, auto);
+  gap: 9px;
+  align-items: start;
+  padding: 7px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(9, 16, 29, 0.48);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.cmd-slice-tool:hover {
+  border-color: rgba(34, 211, 238, 0.26);
+}
+
+.cmd-slice-tool.is-on {
+  border-color: rgba(34, 211, 238, 0.36);
+  background: rgba(34, 211, 238, 0.045);
+}
+
+.cmd-slice-tool input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  accent-color: #22d3ee;
+  cursor: pointer;
+}
+
+.cmd-slice-tool-main {
+  min-width: 0;
+}
+
+.cmd-slice-tool-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.cmd-slice-tool-name > .mono {
+  color: #dbeafe;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-slice-expose {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 4px;
+  background: rgba(52, 211, 153, 0.1);
+  color: #6ee7b7;
+  font-size: 8.5px;
+  line-height: 14px;
+}
+
+.cmd-slice-expose[hidden] {
+  display: none;
+}
+
+.cmd-slice-tool-desc {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cmd-slice-tool-tags {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cmd-slice-tag {
+  padding: 1px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: rgba(124, 160, 214, 0.07);
+  color: var(--text-2);
+  font-size: 8.5px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.cmd-slice-tag.is-read { border-color: rgba(52, 211, 153, 0.25); color: #6ee7b7; background: rgba(52, 211, 153, 0.07); }
+.cmd-slice-tag.is-write { border-color: rgba(251, 191, 36, 0.28); color: #fcd34d; background: rgba(251, 191, 36, 0.07); }
+.cmd-slice-tag.is-danger { border-color: rgba(251, 113, 133, 0.35); color: #fda4af; background: rgba(251, 113, 133, 0.08); }
+.cmd-slice-tag.is-kind { border-color: rgba(96, 165, 250, 0.26); color: #93c5fd; background: rgba(96, 165, 250, 0.07); }
+.cmd-slice-tag.is-dim { opacity: 0.72; }
+
+.cmd-slice-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  padding-top: 2px;
+}
+
+.cmd-slice-page-btn {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(124, 160, 214, 0.04);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.cmd-slice-page-btn:hover:not(:disabled) {
+  border-color: rgba(34, 211, 238, 0.36);
+  color: var(--cyan-text);
+}
+
+.cmd-slice-page-btn.is-on {
+  border-color: rgba(34, 211, 238, 0.55);
+  background: rgba(34, 211, 238, 0.12);
+  color: #a5f3fc;
+}
+
+.cmd-slice-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cmd-slice-page-gap {
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.cmd-slice-page-info {
+  margin-left: 6px;
+  color: var(--text-3);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.cmd-slice-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: none;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: rgba(8, 14, 26, 0.5);
+}
+
+.cmd-slice-foot-note {
+  flex: 1;
+  min-width: 160px;
+  color: var(--text-3);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.cmd-slice-reset {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(124, 160, 214, 0.04);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.cmd-slice-reset:hover {
+  border-color: rgba(251, 113, 133, 0.36);
+  color: #fda4af;
+}
+
+.cmd-slice-save {
+  height: 30px;
+  padding: 0 13px;
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #0891b2, #0e7490);
+  color: #ecfeff;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 18px -10px rgba(8, 145, 178, 0.8);
+}
+
+.cmd-slice-save:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.cmd-slice-save:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* ------------------------------ YAML 快照 ------------------------------ */
+
+.cmd-slice-yaml {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.cmd-slice-yaml-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.cmd-slice-yaml-acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmd-slice-copy {
+  height: 23px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(124, 160, 214, 0.05);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.cmd-slice-copy:hover {
+  border-color: rgba(34, 211, 238, 0.36);
+  color: var(--cyan-text);
+}
+
+.cmd-slice-code {
+  margin: 0;
+  flex: 1;
+  min-height: 280px;
+  max-height: 100%;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid rgba(124, 160, 214, 0.16);
+  border-radius: 9px;
+  background: #04070d;
+  color: #9fb3cc;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ------------------------------ 空态 ------------------------------ */
+
+.cmd-slice-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  margin: auto;
+  padding: 28px 20px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.cmd-slice-empty.is-small {
+  margin: 8px 0;
+  padding: 22px 16px;
+  border: 1px dashed var(--line-soft);
+  border-radius: 9px;
+}
+
+.cmd-slice-empty b {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.cmd-slice-empty span {
+  max-width: 380px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.cmd-slice-go {
+  margin-top: 3px;
+  height: 27px;
+  padding: 0 11px;
+  border: 1px solid rgba(34, 211, 238, 0.36);
+  border-radius: 7px;
+  background: rgba(34, 211, 238, 0.06);
+  color: var(--cyan-text);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+/* ------------------------------ 响应式 ------------------------------ */
+
+@media (max-width: 1280px) {
+  .cmd-slice {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .cmd-slice-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .cmd-slice-budget {
+    grid-column: 1 / -1;
+  }
+}

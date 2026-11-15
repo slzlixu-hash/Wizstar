@@ -56,6 +56,9 @@ public sealed class McpServiceConfig
 
     public Dictionary<string, string>? Env { get; init; }
 
+    /// <summary>自定义请求头（与鉴权模式解耦；值不回显前端）。</summary>
+    public Dictionary<string, string>? Headers { get; init; }
+
     /// <summary>内置服务（随产品发布的自研服务，如罗盘 5206 / 1688 5207）：不可删除，仅可改配置与停用。</summary>
     public bool Builtin { get; init; }
 
@@ -90,6 +93,8 @@ public sealed class McpServiceConfig
     public string Fingerprint() =>
         string.Join("|", Transport, Url ?? string.Empty, Command ?? string.Empty,
             string.Join(",", Args ?? []), string.Join(",", (Env ?? []).Select(kv => kv.Key)),
+            string.Join(";", (Headers ?? []).OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => kv.Key + "=" + kv.Value)),
             AutoStart, Builtin ? "1" : "0", EffectiveAuthType, AuthHeaderName ?? string.Empty, AuthKeyId ?? string.Empty,
             string.IsNullOrWhiteSpace(ShopCredential) ? "0" : "1");
 }
@@ -133,7 +138,8 @@ public sealed record McpServiceSnapshot(
     bool HasAuthSecret = false,
     string AuthType = "none",
     string? AuthHeaderName = null,
-    bool Builtin = false);
+    bool Builtin = false,
+    IReadOnlyList<string>? HeaderKeys = null);
 
 /// <summary>对账摘要。</summary>
 public sealed record McpReconcileSummary(

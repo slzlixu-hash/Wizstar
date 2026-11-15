@@ -51,7 +51,10 @@
     if (a.photo === false || !a.id) {
       return `<span class="${s}" style="font-size:${size === 'xl' ? 20 : 13}px;font-weight:700;color:#cfe0f5">${esc(initial)}</span>`;
     }
-    return `<span class="${s}"><img src="${src}" alt="${esc(a.name || '')}" draggable="false" /></span>`;
+    // 图片加载失败时回落到首字，不留破图
+    return `<span class="${s}"><img src="${src}" alt="${esc(a.name || '')}" draggable="false"
+      onerror="this.style.display='none';var f=this.parentElement&&this.parentElement.querySelector('.avatar__fallback');if(f)f.hidden=false;" />
+      <span class="avatar__fallback" hidden style="font-size:${size === 'xl' ? 20 : 13}px;font-weight:700;color:#cfe0f5">${esc(initial)}</span></span>`;
   }
 
   /* ------------------------------ 按钮 / 输入 ------------------------------ */
@@ -258,16 +261,41 @@
     });
   }
 
-  /** 右上角用户区：设置 / 通知 / 用户胶囊（点击由 app.js 统一委托） */
-  function userCluster(user) {
+  /**
+   * 右上角登录用户菜单：头像 + 用户名，点击展开「切换用户 / 退出系统」。
+   * 管理员头像用 ico/admin.ico（相对 renderer 为 ../ico/admin.ico）；
+   * 其他账号回落为首字头像。图片加载失败时自动切成首字，不留破图。
+   */
+  function userMenu(user) {
     const u = user || (WB.data && WB.data.app.user) || { name: '用户', role: '', initial: '用' };
-    return `<div class="user-cluster">
-      ${iconBtn('settings', { title: '系统设置', attrs: 'data-go="settings"' })}
-      ${iconBtn('bell', { title: '通知', dot: true, attrs: 'data-toast="暂无新通知，3 条审批提醒可在工作台查看"' })}
-      <div class="user-pill" data-go="settings" title="${esc(u.role || '')}">
-        ${avatar({ name: u.name, initial: u.initial, photo: false }, 'sm')}
-        <span class="user-name">${esc(u.name)}</span>
+    const name = u.displayName || u.name || u.username || '用户';
+    const role = String(u.role || '');
+    const roleLabel = role === 'admin' ? '管理员' : role || '操作员';
+    const initial = String(u.initial || name.slice(0, 1) || '用');
+    const isAdmin = role === 'admin' || String(u.username || '').toLowerCase() === 'admin';
+    const avatar = isAdmin
+      ? `<img class="user-menu__img" src="../ico/admin.ico" alt="" data-user-avatar />
+         <span class="user-menu__initial" hidden>${esc(initial)}</span>`
+      : `<span class="user-menu__initial">${esc(initial)}</span>`;
+    const subline = u.username ? `${roleLabel} · ${esc(u.username)}` : roleLabel;
+
+    return `<div class="user-menu" data-user-menu>
+      <button type="button" class="user-menu__trigger" data-user-menu-toggle aria-haspopup="menu" aria-expanded="false" title="${esc(subline)}">
+        <span class="user-menu__avatar">${avatar}</span>
+        <span class="user-menu__name">${esc(name)}</span>
         ${icon('chevron-down', 13, 'dim')}
+      </button>
+      <div class="user-menu__pop" data-user-menu-pop role="menu" hidden>
+        <div class="user-menu__head">
+          <div class="user-menu__head-name">${esc(name)}</div>
+          <div class="user-menu__head-role">${subline}</div>
+        </div>
+        <button type="button" class="user-menu__item" role="menuitem" data-user-switch>
+          ${icon('refresh', 14)}<span>切换用户</span>
+        </button>
+        <button type="button" class="user-menu__item is-danger" role="menuitem" data-user-exit>
+          ${icon('power', 14)}<span>退出系统</span>
+        </button>
       </div>
     </div>`;
   }
@@ -291,7 +319,7 @@
     tag,
     statusDot,
     avatar,
-    userCluster,
+    userMenu,
     btn,
     iconBtn,
     input,

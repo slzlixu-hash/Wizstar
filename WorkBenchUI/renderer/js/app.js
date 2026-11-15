@@ -23,19 +23,70 @@
   const bodyEl = document.getElementById('page-body');
   const headerEl = document.getElementById('page-header');
 
+  /** 当前登录用户（来自主进程 auth:me；渲染层只拿展示信息，不含令牌）。 */
+  let currentUser = null;
+
+  /**
+   * 页面头部：标题/副标题 + 页面操作 + 右上角登录用户菜单。
+   * 所有页面（含离线/加载态）都走这里，保证用户菜单位置一致。
+   */
+  function paintHeader(page, actionsHtml) {
+    headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">${page.title || ''}</h1>${
+      page.subtitle ? `<div class="page-subtitle">${page.subtitle}</div>` : ''
+    }</div></div><div class="page-actions">${actionsHtml || ''}</div>`;
+  }
+
+  /** 渲染侧边栏底部的登录用户（头像 + 用户名，固定位置；所有页面共用）。 */
+  function renderSidebarUser() {
+    const host = document.getElementById('sidebar-user');
+    if (!host) return;
+    host.innerHTML = ui.userMenu(currentUser);
+    const img = host.querySelector('[data-user-avatar]');
+    if (img) {
+      img.addEventListener('error', () => {
+        img.hidden = true;
+        const initial = host.querySelector('.user-menu__initial');
+        if (initial) initial.hidden = false;
+      });
+    }
+  }
+
+  async function loadCurrentUser() {
+    const bridge = window.workbench;
+    if (!bridge || typeof bridge.me !== 'function') return;
+    try {
+      const res = await bridge.me();
+      if (res && res.ok && res.user) {
+        const name = res.user.displayName || res.user.username || '用户';
+        currentUser = {
+          username: res.user.username || '',
+          displayName: name,
+          name: name,
+          initial: name.slice(0, 1) || '用',
+          role: res.user.role || '',
+        };
+        renderSidebarUser();
+      }
+    } catch (_) {
+      /* 桥接不可用：保持默认用户占位 */
+    }
+  }
+
+  function closeUserMenus() {
+    document.querySelectorAll('[data-user-menu-pop]').forEach((pop) => { pop.hidden = true; });
+    document.querySelectorAll('[data-user-menu-toggle]').forEach((btn) => { btn.setAttribute('aria-expanded', 'false'); });
+  }
+
   /* ------------------------------ 外壳静态部分 ------------------------------ */
   function renderChrome() {
-    const logo = document.getElementById('titlebar-logo');
-    if (logo) logo.innerHTML = WB.brandLogo(15);
-
+    // 侧栏 Logo 与系统托盘/任务栏共用同一图标资源
     const brandLogo = document.getElementById('brand-logo');
-    if (brandLogo) brandLogo.innerHTML = WB.brandLogo(19);
+    if (brandLogo) {
+      brandLogo.innerHTML = '<img class="brand-logo-img" src="assets/app-icon.png" alt="智多星" draggable="false" />';
+    }
 
-    const endpoint = document.getElementById('sidebar-endpoint');
+    const endpoint = document.getElementById('titlebar-endpoint');
     if (endpoint) endpoint.textContent = data.app.endpoint;
-
-    const version = document.getElementById('sidebar-version');
-    if (version) version.textContent = data.app.version;
 
     const controls = document.querySelectorAll('.window-controls [data-win]');
     const icons = { minimize: 'minus', maximize: 'maximize', close: 'close' };
@@ -126,9 +177,7 @@
       return;
     }
 
-    headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">${page.title || ''}</h1>${
-      page.subtitle ? `<div class="page-subtitle">${page.subtitle}</div>` : ''
-    }</div></div>${page.actions ? `<div class="page-actions">${page.actions}</div>` : ''}`;
+    paintHeader(page, page.actions);
 
     const ctx = {
       data,
@@ -171,9 +220,10 @@
     const reason = (data.app && data.app.error) || '后端服务未响应';
     const endpoint = (data.app && data.app.endpoint) || '127.0.0.1:5301';
 
-    headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">本地服务未连接</h1><div class="page-subtitle">${ui.esc(
-      page.title || ''
-    )}暂不可用</div></div></div>`;
+    paintHeader(
+      { title: '本地服务未连接', subtitle: `${page.title || ''}暂不可用` },
+      ''
+    );
 
     bodyEl.innerHTML = `<div class="empty">
       <div class="empty-icon">${WB.icon('alert', 26)}</div>
@@ -202,7 +252,7 @@
 
   /** 首次加载中：显示占位，不渲染空表格造成「无数据」误解。 */
   function renderLoading(page) {
-    headerEl.innerHTML = `<div class="page-heading"><div><h1 class="page-title">${page.title || ''}</h1></div></div>`;
+    paintHeader({ title: page.title || '' }, '');
     bodyEl.innerHTML = `<div class="empty">
       <div class="empty-icon"><span class="spinner"></span></div>
       <div class="empty-title">正在加载真实数据…</div>
@@ -239,15 +289,61 @@
       if (window.workbench) window.workbench.logout();
       return;
     }
+
+    /* ---------- 右上角登录用户菜单 ---------- */
+    const switchUser = e.target.closest('[data-user-switch]');
+    if (switchUser) {
+      e.preventDefault();
+      closeUserMenus();
+      if (window.workbench && typeof window.workbench.switchUser === 'function') window.workbench.switchUser();
+      return;
+    }
+
+    const exitApp = e.target.closest('[data-user-exit]');
+    if (exitApp) {
+      e.preventDefault();
+      closeUserMenus();
+      if (window.workbench && typeof window.workbench.quit === 'function') window.workbench.quit();
+      return;
+    }
+
+    const menuToggle = e.target.closest('[data-user-menu-toggle]');
+    if (menuToggle) {
+      e.preventDefault();
+      const pop = menuToggle.parentElement.querySelector('[data-user-menu-pop]');
+      const willOpen = pop ? pop.hidden : false;
+      closeUserMenus();
+      if (pop && willOpen) {
+        pop.hidden = false;
+        menuToggle.setAttribute('aria-expanded', 'true');
+      }
+      return;
+    }
+
+    if (!e.target.closest('[data-user-menu]')) closeUserMenus();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeUserMenus();
   });
 
   window.addEventListener('hashchange', render);
 
   /* ------------------------------ 启动 ------------------------------ */
+  // 其他窗口（指挥官界面）请求主窗口跳转
+  if (window.workbench && typeof window.workbench.onMainNavigate === 'function') {
+    window.workbench.onMainNavigate((hash) => {
+      const id = String(hash || '').replace(/^#\/?/, '');
+      if (id && WB.pages[id]) go(id);
+    });
+  }
+
   function boot() {
     renderChrome();
+    renderSidebarUser();
     if (!location.hash) location.hash = `#/${DEFAULT_PAGE}`;
     render();
+    loadCurrentUser();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

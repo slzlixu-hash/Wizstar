@@ -2,7 +2,7 @@
   "name": "mcp-douyin-compass",
   "version": "1.0.0",
   "private": true,
-  "description": "抖店电商罗盘选品 MCP 服务（Streamable HTTP，规范 V1.0）",
+  "description": "电商罗盘选品 MCP 服务（Streamable HTTP，规范 V1.0）",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

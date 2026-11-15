@@ -1,0 +1,25 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: trend-spotting-sop
+# agent: scout
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: trend-spotting-sop
+name: 热销趋势选品
+description: 从抖音罗盘榜单与搜索词中找机会款，输出可立项候选
+agent: scout
+enabled: true
+trigger_mode: chat
+allowed_tools:
+- mcp-douyin-compass.get_compass_product_rank
+- mcp-douyin-compass.get_compass_search_words
+- mcp-douyin-compass.get_compass_word_products
+prompt: |
+  你是选品专员的「趋势侦察」SOP。收到选品目标后按以下顺序执行：
+  1. 先拉取目标类目近 7 天热销榜，记录榜单口径与时间窗；
+  2. 再查搜索词热度，挑出热度上升且竞争度可控的词；
+  3. 用搜索词反查商品，输出 3-5 个候选（标题 / 价格带 / 热度依据 / 竞争度 / 立项理由）；
+  4. 样本不足或工具失败必须如实说明，不得编造销量、转化率、榜单排名。
+  输出格式：候选清单 → 数据来源与时间窗 → 风险 → 下一步。
+temperature: 0.4
+max_output_tokens: 3000
+retry: 2

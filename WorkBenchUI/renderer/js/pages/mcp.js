@@ -1,60 +1,33 @@
 'use strict';
 
 /**
- * MCP 插件管理页（纯真实数据，无演示降级）。
+ * MCP 插件管理页（主界面 · 全局 API 网关视角）。
  *
- * 设计目标（重设计版）：
- *   方便接入 —— 粘贴服务地址自动识别（本机→免鉴权、自动生成 ID/名称），鉴权四档卡片式选择，保存即握手；
- *   方便管理 —— 单行一服务的列表（状态点/名称/地址/工具数/错误摘要），行内「调试 / 握手 / 编辑 可见、停用 / 删除在详情里」；
- *   方便查看 —— 顶部统计 + 最近检测时间 + 行内状态徽标与错误摘要；点行右滑出详情（元数据 / 工具清单 / 调试调用）。
+ * 设计口径：
+ *   - 面向 IT 运维 / 开发：只关心「服务通不通、鉴权对不对、Schema 能不能拿到」；
+ *   - 中左栏：全局 MCP Servers（物理服务实例 + 绿/红网络状态）；
+ *   - 中右栏：全局 MCP Configuration（Endpoint / 三档鉴权 / 自定义 Header / 在线调试终端）；
+ *   - 不出现 Agent、Skill、Token 预算等业务概念。
  *
- * 数据源：/api/mcp/servers + /api/mcp/tools（全部真实响应，失败显示明确错误态）
- * 写操作：POST/PUT/DELETE /api/mcp/servers、/handshake、/disconnect、/tools/call、/debug-curl、/reconcile
+ * 数据源与写操作全部走真实接口：
+ *   GET  /api/mcp/servers、/api/mcp/tools
+ *   POST /api/mcp/probe（不写清单，直接握手并打印原始 initialize / tools/list）
+ *   POST /api/mcp/servers、PUT /api/mcp/servers/{id}、DELETE /api/mcp/servers/{id}
+ *   POST /api/mcp/servers/{id}/handshake、/disconnect
  */
 (function () {
   const WB = window.WB;
   const ui = WB.ui;
   const pages = (WB.pages = WB.pages || {});
 
-  const SCOPES = [
-    { id: 'all', label: '全部' },
-    { id: 'builtin', label: '内置' },
-    { id: 'external', label: '外部' },
-  ];
-
-  const STATES = [
-    { id: 'all', label: '全部状态' },
-    { id: 'online', label: '在线' },
-    { id: 'offline', label: '异常' },
-    { id: 'disabled', label: '已停用' },
-  ];
-
-  // 四档可插拔鉴权：本机直连默认免鉴权，HMAC 仅跨公网高危服务使用
   const AUTH_MODES = [
-    { id: 'none', label: '免鉴权', hint: '本机 127.0.0.1 直连，不带任何凭证头' },
-    { id: 'bearer', label: 'Bearer', hint: '标准 Authorization: Bearer <Key>' },
-    { id: 'header', label: '自定义头', hint: 'X-Api-Key 等固定请求头' },
-    { id: 'hmac', label: 'MCP-HMAC', hint: '跨公网高危服务，自动签名' },
+    { id: 'none', label: '免签权 None' },
+    { id: 'bearer', label: 'Bearer Token' },
+    { id: 'hmac', label: 'HMAC 签名' },
   ];
-
-  const EMPTY_STATS = [
-    { label: '已登记插件', value: '—', unit: '', tone: 'cyan' },
-    { label: '握手在线', value: '—', unit: '', tone: 'green' },
-    { label: '异常 / 待接入', value: '—', unit: '', tone: 'amber' },
-    { label: '可用工具', value: '—', unit: '', tone: 'violet' },
-  ];
-
-  const ICONS = ['shop', 'server', 'globe', 'link', 'database', 'sparkles', 'plugin', 'wifi'];
-  const TONES = ['cyan', 'blue', 'violet', 'green', 'amber', 'slate', 'rose', 'cyan'];
-
-  /* ------------------------------ 通用工具 ------------------------------ */
 
   function esc(v) {
     return ui.esc(v === undefined || v === null ? '' : String(v));
-  }
-
-  function mcpApi() {
-    return (WB.api && WB.api.mcp) || null;
   }
 
   function toast(msg, tone) {
@@ -67,267 +40,70 @@
     return isNaN(d.getTime()) ? String(v) : d.toLocaleString('zh-CN', { hour12: false });
   }
 
-  function fmtClock(v) {
-    if (!v) return '—';
-    const d = new Date(v);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleTimeString('zh-CN', { hour12: false });
-  }
-
-  function field(overlay, key) {
-    const el = overlay.querySelector('[data-f="' + key + '"]');
-    return el ? String(el.value || '').trim() : '';
-  }
-
   function hostOf(server) {
     const raw = String(server.url || '');
     const m = /^(https?:\/\/[^\s/]+)/i.exec(raw);
-    if (m) return m[1].replace(/^https?:\/\//i, '');
-    return raw || String(server.transport || '');
+    return m ? m[1].replace(/^https?:\/\//i, '') : raw;
   }
 
-  /** 状态语义统一出口：kind 给圆点，tone 给徽标配色。 */
-  function stateInfo(server) {
-    const state = String((server && server.state) || '').toLowerCase();
-    if (server && server.online) return { kind: 'online', tone: 'green', label: '在线' };
-    if (state === 'connecting') return { kind: 'busy', tone: 'cyan', label: '握手中' };
-    if (state === 'error') return { kind: 'amber', tone: 'amber', label: '异常' };
-    if (state === 'disabled') return { kind: 'offline', tone: 'slate', label: '已停用' };
-    return { kind: 'offline', tone: 'slate', label: '未连接' };
+  function stateMeta(server) {
+    if (!server) return { label: '待接入', tone: 'slate', dot: 'slate' };
+    const raw = String(server.state || '').toLowerCase();
+    if (server.online || raw === 'connected') return { label: '运行正常', tone: 'green', dot: 'green' };
+    if (raw === 'connecting') return { label: '握手中', tone: 'cyan', dot: 'cyan' };
+    if (raw === 'disabled') return { label: '未启用', tone: 'slate', dot: 'slate' };
+    return { label: '异常 / 断连', tone: 'rose', dot: 'red' };
   }
 
-  /** 常见错误友好化：鉴权/连通性问题直接给可执行提示，其余保持原文（抽屉里可看全文）。 */
-  function friendlyError(text) {
-    const raw = String(text || '');
-    if (!raw) return '';
-    if (/(41001|\b401\b)/.test(raw) && /Authorization|HMAC|Bearer|鉴权/i.test(raw)) {
-      return '鉴权失败：服务端拒绝了请求，请在「编辑」里核对鉴权模式与密钥';
+  /** 四档鉴权在后端仍保留 header 兼容；本页只暴露产品要求的三档。 */
+  function authModeOf(server) {
+    const type = String((server && server.authType) || 'none').toLowerCase();
+    return type === 'bearer' || type === 'hmac' ? type : 'none';
+  }
+
+  function blankDraft() {
+    return {
+      id: '',
+      name: '',
+      url: '',
+      authType: 'none',
+      authKeyId: '',
+      authSecret: '',
+      headers: [],
+      autoStart: true,
+    };
+  }
+
+  function draftFromServer(server) {
+    return {
+      id: String(server.id || ''),
+      name: String(server.name || ''),
+      url: String(server.url || ''),
+      authType: authModeOf(server),
+      authKeyId: String(server.authKeyId || ''),
+      authSecret: '',
+      headers: (server.headerKeys || []).map(function (key) { return { key: key, value: '' }; }),
+      autoStart: !!server.autoStart,
+    };
+  }
+
+  function deriveId(url, name) {
+    const m = /^https?:\/\/([^/:]+)(?::(\d+))?/i.exec(String(url || ''));
+    if (m) {
+      const host = m[1].toLowerCase() === 'localhost' ? 'local' : m[1].toLowerCase().replace(/[^a-z0-9.-]/g, '');
+      if (m[2]) return (host === 'local' ? 'local-' : 'svc-') + m[2];
+      return host || 'mcp';
     }
-    if (/ECONNREFUSED|EHOSTUNREACH|不可达|拒绝连接|connect ECONN/i.test(raw)) {
-      return '无法连接：服务未启动或端口不通（检查地址与进程）';
-    }
-    if (/超时|timed? ?out/i.test(raw)) return '连接超时：服务响应过慢或不可达';
-    return raw;
+    return String(name || 'mcp').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'mcp';
   }
 
-  /** 行内摘要：在线看工具数与连接时间，异常看错误，停用看原因。 */
-  function summaryOf(server) {
-    const st = stateInfo(server);
-    if (server.online) {
-      const parts = [String(server.toolsCount || 0) + ' 个工具'];
-      if (server.connectedAt) parts.push('连接于 ' + fmtClock(server.connectedAt));
-      return { text: parts.join(' · '), error: false };
-    }
-    if (st.label === '已停用') return { text: server.lastError || '已停用（清单保留，可重新启用）', error: false };
-    return { text: friendlyError(server.lastError) || '尚未连接，点「连接」发起握手', error: true };
+  function stamp() {
+    return new Date().toLocaleTimeString('zh-CN', { hour12: false });
   }
 
-  /* ------------------------------ 统计卡 ------------------------------ */
-
-  const STAT_ICONS = ['plugin', 'wifi', 'link', 'zap'];
-
-  function statCard(stat, i) {
-    const tone = stat.tone || 'cyan';
-    const dot = tone === 'green' || tone === 'amber' ? '<i class="mcp-stat__dot"></i>' : '';
-    return `<section class="card mcp-stat mcp-tone-${esc(tone)}">
-      <div class="mcp-stat__top">
-        <span class="mcp-stat__ico">${ui.icon(STAT_ICONS[i] || 'plugin', 15)}</span>
-        <span class="mcp-stat__label">${esc(stat.label)}</span>
-      </div>
-      <div class="mcp-stat__value num">${esc(stat.value)}<span class="mcp-stat__unit">${esc(stat.unit || '')}</span>${dot}</div>
-    </section>`;
-  }
-
-  /* ------------------------------ 服务列表 ------------------------------ */
-
-  function rowActions(server) {
-    const st = stateInfo(server);
-    const acts = [`<button type="button" class="mcp-act" data-act="debug">调试</button>`];
-    if (st.label === '已停用') {
-      acts.push(`<button type="button" class="mcp-act" data-act="handshake">启用</button>`);
-    } else if (server.online) {
-      acts.push(`<button type="button" class="mcp-act" data-act="handshake">重新握手</button>`);
-    } else {
-      acts.push(`<button type="button" class="mcp-act" data-act="handshake">连接</button>`);
-    }
-    acts.push(`<button type="button" class="mcp-act" data-act="config">编辑</button>`);
-    return acts.join('');
-  }
-
-  function rowHtml(server, i) {
-    const st = stateInfo(server);
-    const sum = summaryOf(server);
-    const tone = TONES[i % TONES.length];
-    const icon = ICONS[i % ICONS.length];
-    return `<article class="mcp-row${server.online ? '' : ' is-off'}${st.label === '已停用' ? ' is-disabled' : ''}"
-        data-server="${esc(server.id)}" tabindex="0" role="button" title="点击查看详情与调试">
-      <i class="status-dot ${st.kind}"></i>
-      <span class="mcp-row__ico mcp-tone-${esc(tone)}">${ui.icon(icon, 17)}</span>
-      <div class="mcp-row__main">
-        <div class="mcp-row__title">
-          <span class="mcp-row__name">${esc(server.name)}</span>
-          ${server.builtin ? ui.badge('内置', { tone: 'cyan' }) : ''}
-          <span class="mcp-chip" title="鉴权模式">${esc(server.authLabel || '免鉴权')}</span>
-          ${ui.badge(st.label, { tone: st.tone, dot: true })}
-        </div>
-        <div class="mcp-row__meta mono" title="${esc(server.url || '')}">${esc(server.id)} · ${esc(hostOf(server))}</div>
-        <div class="mcp-row__sub${sum.error ? ' is-error' : ''}" title="${esc(server.lastError || sum.text)}">${esc(sum.text)}</div>
-      </div>
-      <div class="mcp-row__side">
-        <div class="mcp-row__acts">${rowActions(server)}</div>
-      </div>
-    </article>`;
-  }
-
-  function addRowHtml() {
-    return `<button type="button" class="mcp-row mcp-row--add" data-mcp-add>
-      <span class="mcp-row__plus">${ui.icon('plus', 16)}</span>
-      <span class="mcp-row__main">
-        <span class="mcp-row__name">接入外部 MCP 服务</span>
-        <span class="mcp-row__meta">粘贴 URL → 自动识别鉴权 → 保存即握手</span>
-      </span>
-      <span class="mcp-row__arrow">${ui.icon('chevron-right', 15)}</span>
-    </button>`;
-  }
-
-  function emptyHtml(reason, withAdd) {
-    return `<div class="mcp-empty">
-      ${ui.icon('plugin', 26)}
-      <div class="mcp-empty__title">${esc(reason)}</div>
-      <div class="tiny dim">MCP 服务用于给 Agent 提供外部工具；本地服务填 127.0.0.1 地址即可秒级接入。</div>
-      ${withAdd ? `<div class="mcp-empty__acts">${ui.btn({ label: '接入 MCP 服务', icon: 'plus', tone: 'primary', attrs: 'data-mcp-add' })}</div>` : ''}
-    </div>`;
-  }
-
-  function sectionHtml(title, rows, withAdd, emptyText) {
-    return `<section class="mcp-sec">
-      <div class="mcp-sec__head">
-        <span class="mcp-sec__title">${esc(title)}</span>
-        <span class="mcp-sec__count">${rows.length}</span>
-        <span class="mcp-sec__hint">${title === '内置服务' ? '随产品发布 · 可改配置 / 可停用，不可删除' : '自行接入 · 支持完整增删改'}</span>
-      </div>
-      <div class="mcp-list">
-        ${rows.length ? rows.map(rowHtml).join('') : `<div class="mcp-sec__empty">${esc(emptyText)}</div>`}
-        ${withAdd ? addRowHtml() : ''}
-      </div>
-    </section>`;
-  }
-
-  function sectionsHtml(rows) {
-    const builtins = rows.filter(function (r) { return r.builtin; });
-    const externals = rows.filter(function (r) { return !r.builtin; });
-    if (!builtins.length && !externals.length) return '';
-    let html = '';
-    if (builtins.length) html += sectionHtml('内置服务', builtins, false, '暂无内置服务');
-    html += sectionHtml('外部服务', externals, true, '还没有外部服务，点下方「接入外部 MCP 服务」开始');
-    return html;
-  }
-
-  /* ------------------------------ 详情抽屉 ------------------------------ */
-
-  const RISK_LABEL = { read: '只读', write: '写入', irreversible: '不可逆' };
-
-  function drawerToolsHtml(server) {
-    const meta = server.toolsMeta || [];
-    if (!meta.length) {
-      return `<div class="mcp-sec__empty">${server.online ? '服务未返回工具' : '尚未握手，暂无工具清单'}</div>`;
-    }
-    const rows = meta.map(function (t) {
-      const risk = String(t.risk || '').toLowerCase();
-      const risky = risk === 'write' || risk === 'irreversible';
-      const label = RISK_LABEL[risk] || '未声明';
-      return `<div class="mcp-tool">
-        <div class="mcp-tool__head">
-          <span class="mcp-tool__name mono">${esc(t.name)}</span>
-          ${ui.badge(label, { tone: risky ? 'amber' : risk === 'read' ? 'green' : 'slate' })}
-          ${risk === 'irreversible' ? `<span class="mcp-tool__hint">需人工审批</span>` : ''}
-        </div>
-        <div class="mcp-tool__desc">${esc(t.description || '无描述')}</div>
-      </div>`;
-    }).join('');
-    return rows;
-  }
-
-  function drawerHtml(server) {
-    const st = stateInfo(server);
-    const meta = [
-      ['服务 ID', `<span class="mono">${esc(server.id)}</span>`],
-      ['传输地址', `<span class="mono" title="${esc(server.url || '')}">${esc(server.url || '—')}</span>`],
-      ['鉴权模式', esc(server.authLabel || '免鉴权')],
-      ['协议版本', `<span class="mono">${esc(server.protocolVersion || '—')}</span>`],
-      ['服务端', esc(server.bind || '—')],
-      ['版本', `<span class="mono">${esc(server.serverVersion || '—')}</span>`],
-      ['工具数量', esc(String(server.toolsCount || 0))],
-      ['连接时间', `<span class="mono">${esc(fmtTime(server.connectedAt))}</span>`],
-      ['最近检测', `<span class="mono">${esc(fmtTime(server.toolsFetchedAt))}</span>`],
-    ];
-
-    const toolSel = (server.toolNames && server.toolNames.length)
-      ? ui.select({ options: server.toolNames.map(function (n) { return { value: n, label: n }; }), attrs: 'data-mcp-tool' })
-      : `<div class="mcp-sec__empty" style="margin:0">（该服务未登记工具）</div>`;
-
-    const offlineHint = server.online
-      ? ''
-      : `<div class="mcp-note">服务当前未连接：调试调用会失败，请先「${st.label === '已停用' ? '启用' : '连接'}」。</div>`;
-
-    return `<div class="mcp-drawer__head">
-        <div class="mcp-drawer__heading">
-          <div class="mcp-drawer__title">
-            <span class="mcp-drawer__name">${esc(server.name)}</span>
-            ${server.builtin ? ui.badge('内置', { tone: 'cyan' }) : ui.badge('外部', { tone: 'slate' })}
-            ${ui.badge(st.label, { tone: st.tone, dot: true })}
-          </div>
-          <div class="mcp-drawer__slug mono">${esc(server.id)}</div>
-        </div>
-        ${ui.iconBtn('close', { title: '关闭（Esc）', attrs: 'data-mcp-close' })}
-      </div>
-      <div class="mcp-drawer__body">
-        <div class="mcp-endpoint mono" title="${esc(server.url || '')}">
-          <i class="status-dot ${st.kind}"></i>
-          <span class="mcp-endpoint__addr">${esc(hostOf(server) || '未配置地址')}</span>
-        </div>
-        ${server.lastError && !server.online ? `<div class="mcp-alert">${esc(server.lastError)}</div>` : ''}
-
-        <div class="mcp-d-section">
-          <div class="mcp-d-title">服务信息</div>
-          ${ui.kv(meta, { cls: 'mcp-kv' })}
-        </div>
-
-        <div class="mcp-d-section">
-          <div class="mcp-d-title">工具清单<span class="mcp-d-title__count">${(server.toolsMeta || []).length}</span></div>
-          <div class="mcp-tools">${drawerToolsHtml(server)}</div>
-        </div>
-
-        <div class="mcp-d-section">
-          <div class="mcp-d-title">调试调用<span class="mcp-d-title__hint">仅只读工具</span></div>
-          ${offlineHint}
-          <div class="mcp-select">${toolSel}</div>
-          <label class="field" style="margin-top:8px">
-            <span class="field-label">调用参数 (JSON，可空)</span>
-            ${ui.input({ placeholder: '{ }', attrs: 'data-mcp-args' })}
-          </label>
-          <div class="mcp-d-actions">
-            ${ui.btn({ label: '运行测试', tone: 'primary', icon: 'play', size: 'sm', attrs: 'data-mcp-run' })}
-            ${ui.btn({ label: '复制调试 cURL', tone: 'ghost', size: 'sm', icon: 'copy', attrs: 'data-mcp-curl' })}
-          </div>
-          <div class="mcp-term">
-            <div class="mcp-term__head">
-              <span>${ui.icon('terminal', 13)} terminal</span>
-              <span class="mono">tools/list</span>
-            </div>
-            <div class="terminal mcp-term__body" data-mcp-term></div>
-          </div>
-          <div class="tiny dim" style="line-height:1.6">写风险工具由平台以 43002 拒绝：须由 Agent 运行时执行（写操作需审批）。</div>
-        </div>
-      </div>
-      <div class="mcp-drawer__foot">
-        ${ui.btn({ label: st.label === '已停用' ? '启用服务' : '重新握手', tone: 'primary', icon: 'refresh', attrs: 'data-mcp-handshake' })}
-        ${ui.btn({ label: '编辑配置', tone: 'ghost', icon: 'settings', attrs: 'data-mcp-edit' })}
-        <span class="mcp-drawer__foot-right">
-          ${st.label === '已停用' ? '' : '<button type="button" class="mcp-act" data-mcp-toggle>停用</button>'}
-          ${server.builtin ? '' : '<button type="button" class="mcp-act mcp-act--danger" data-mcp-delete>删除</button>'}
-        </span>
-      </div>`;
+  function pretty(value) {
+    if (value === undefined || value === null) return '# (empty)';
+    try { return JSON.stringify(value, null, 2); } catch (_) { return String(value); }
   }
 
   /* ------------------------------ 终端着色 ------------------------------ */
@@ -354,491 +130,523 @@
     return out;
   }
 
-  function lineHtml(text) {
-    return `<div class="mcp-t-line">${hlLine(text)}</div>`;
-  }
-
-  /* ------------------------------ 接入 / 编辑弹框 ------------------------------ */
-
-  function authPanels(server) {
-    const hasSecret = !!(server && server.hasAuthSecret);
-    const secretPlaceholder = hasSecret ? '已配置，留空沿用' : '必填';
-    return `
-      <div class="mcp-auth-panel" data-auth-panel="none">
-        <div class="mcp-form__hint">免鉴权：不带任何 Authorization 头。适合本机脚本 / 罗盘 / 1688 这类 127.0.0.1 直连服务。</div>
-      </div>
-      <div class="mcp-auth-panel" data-auth-panel="bearer">
-        <label class="field"><span class="field-label">API Key</span>
-          ${ui.input({ type: 'password', placeholder: secretPlaceholder, attrs: 'data-f="authSecret" autocomplete="new-password"' })}
-        </label>
-        <div class="mcp-form__hint">平台会发送 <span class="mono">Authorization: Bearer &lt;Key&gt;</span>。</div>
-      </div>
-      <div class="mcp-auth-panel" data-auth-panel="header">
-        <label class="field"><span class="field-label">Header 名称</span>
-          ${ui.input({ value: server ? String(server.authHeaderName || '') : '', placeholder: 'X-Api-Key', attrs: 'data-f="authHeaderName" autocomplete="off"' })}
-        </label>
-        <label class="field"><span class="field-label">Header 值（Key）</span>
-          ${ui.input({ type: 'password', placeholder: secretPlaceholder, attrs: 'data-f="authSecret" autocomplete="new-password"' })}
-        </label>
-      </div>
-      <div class="mcp-auth-panel" data-auth-panel="hmac">
-        <label class="field"><span class="field-label">Key ID</span>
-          ${ui.input({ value: server ? String(server.authKeyId || '') : '', placeholder: '如 wizstar-local', attrs: 'data-f="authKeyId" autocomplete="off"' })}
-        </label>
-        <label class="field"><span class="field-label">Secret</span>
-          ${ui.input({ type: 'password', placeholder: secretPlaceholder, attrs: 'data-f="authSecret" autocomplete="new-password"' })}
-        </label>
-        <div class="mcp-form__hint">签名绑定请求体与 +300s 时间窗，仅建议跨公网的高危服务使用。</div>
-      </div>`;
-  }
-
-  function serviceForm(server) {
-    const isEdit = !!server;
-    const authType = server ? String(server.authType || 'none') : 'none';
-    return `<div class="mcp-form" data-mcp-form>
-      <label class="field">
-        <span class="field-label">服务地址（URL）<span class="mcp-req">*</span></span>
-        ${ui.input({ value: server ? String(server.url || '') : '', placeholder: 'http://127.0.0.1:5210 或 https://mcp.example.com', attrs: 'data-f="url" data-mcp-url autocomplete="off"' })}
-        <span class="mcp-form__hint" data-mcp-url-hint>粘贴地址即可：本机 127.0.0.1 会自动选「免鉴权」并生成服务 ID。</span>
-      </label>
-      <label class="field">
-        <span class="field-label">显示名称<span class="mcp-req">*</span></span>
-        ${ui.input({ value: server ? server.name : '', placeholder: '如：1688 货源', attrs: 'data-f="name"' })}
-      </label>
-
-      <div class="field">
-        <span class="field-label">鉴权模式</span>
-        <div class="mcp-auth-modes" data-mcp-auth-modes>
-          ${AUTH_MODES.map(function (m) {
-            return `<button type="button" class="mcp-auth-mode${m.id === authType ? ' is-on' : ''}" data-auth-mode="${m.id}" title="${esc(m.hint)}">
-              <span class="mcp-auth-mode__label">${esc(m.label)}</span>
-              <span class="mcp-auth-mode__hint">${esc(m.hint)}</span>
-            </button>`;
-          }).join('')}
-        </div>
-        <input type="hidden" data-f="authType" value="${esc(authType)}" />
-      </div>
-      ${authPanels(server)}
-
-      <details class="mcp-advanced"${isEdit ? '' : ''}>
-        <summary>高级选项</summary>
-        <div class="mcp-advanced__body">
-          <label class="field"><span class="field-label">服务 ID（小写字母/数字/._-）</span>
-            ${ui.input({ value: server ? server.id : '', placeholder: '留空自动生成，如 local-5210', attrs: 'data-f="id"' })}
-          </label>
-          <label class="field"><span class="field-label">启动时自动握手</span>
-            ${ui.switchControl({ checked: server ? !!server.autoStart : true, attrs: 'data-f="autoStart"' })}
-          </label>
-        </div>
-      </details>
-
-      <div class="mcp-form__note">保存后立即写入声明式清单并自动握手；密钥明文不回显，编辑时留空即沿用原值。</div>
-    </div>`;
-  }
-
-  /** 地址解析：本机回环 → none + 生成 id/名称；外部 → 保留当前选择。 */
-  function applyUrlHints(overlay, opts) {
-    const urlEl = overlay.querySelector('[data-mcp-url]');
-    const hintEl = overlay.querySelector('[data-mcp-url-hint]');
-    const idEl = overlay.querySelector('[data-f="id"]');
-    const nameEl = overlay.querySelector('[data-f="name"]');
-    if (!urlEl) return;
-
-    const raw = String(urlEl.value || '').trim();
-    const loopback = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::(\d+))?/i.exec(raw);
-    const port = loopback && loopback[2] ? loopback[2] : '';
-
-    if (loopback) {
-      if (!opts.authTouched) setAuthMode(overlay, 'none');
-      if (!opts.idTouched && idEl && !idEl.value) idEl.value = port ? 'local-' + port : 'local';
-      if (!opts.nameTouched && nameEl && !nameEl.value) nameEl.value = port ? '本机 MCP · ' + port : '本机 MCP';
-      if (hintEl) hintEl.textContent = '已识别为本机地址：默认免鉴权、自动生成服务 ID，填好名称即可保存。';
-    } else if (raw) {
-      if (hintEl) hintEl.textContent = '外部地址：请按服务端要求选择鉴权模式（Bearer / 自定义头 / HMAC）。';
-    } else if (hintEl) {
-      hintEl.textContent = '粘贴地址即可：本机 127.0.0.1 会自动选「免鉴权」并生成服务 ID。';
-    }
-  }
-
-  function setAuthMode(overlay, mode) {
-    const hidden = overlay.querySelector('[data-f="authType"]');
-    if (hidden) hidden.value = mode;
-    overlay.querySelectorAll('[data-auth-mode]').forEach(function (b) {
-      b.classList.toggle('is-on', b.dataset.authMode === mode);
-    });
-    overlay.querySelectorAll('[data-auth-panel]').forEach(function (p) {
-      p.hidden = p.dataset.authPanel !== mode;
-    });
-  }
-
-  function bindServiceForm(overlay, opts) {
-    const touched = { auth: !!opts.isEdit, id: !!opts.isEdit, name: !!opts.isEdit };
-    // 编辑态沿用已有配置，不做自动改写；新建态才随输入智能补全
-    if (opts.isEdit) {
-      const hidden = overlay.querySelector('[data-f="authType"]');
-      setAuthMode(overlay, hidden ? hidden.value : 'none');
-    } else {
-      setAuthMode(overlay, 'none');
-    }
-
-    overlay.addEventListener('click', function (e) {
-      const btn = e.target.closest('[data-auth-mode]');
-      if (!btn) return;
-      touched.auth = true;
-      setAuthMode(overlay, btn.dataset.authMode);
-    });
-
-    const urlEl = overlay.querySelector('[data-mcp-url]');
-    if (urlEl) {
-      urlEl.addEventListener('input', function () { applyUrlHints(overlay, { authTouched: touched.auth, idTouched: touched.id, nameTouched: touched.name }); });
-    }
-    const idEl = overlay.querySelector('[data-f="id"]');
-    if (idEl) idEl.addEventListener('input', function () { touched.id = true; });
-    const nameEl = overlay.querySelector('[data-f="name"]');
-    if (nameEl) nameEl.addEventListener('input', function () { touched.name = true; });
-
-    if (!opts.isEdit && urlEl) applyUrlHints(overlay, touched);
-  }
-
-  /** 收集表单：按鉴权模式取凭证；留空 = 不提交（后端沿用旧值）。 */
-  function collectBody(overlay, server) {
-    const mode = field(overlay, 'authType') || 'none';
-    const autoEl = overlay.querySelector('[data-f="autoStart"]');
-    const body = {
-      name: field(overlay, 'name'),
-      url: field(overlay, 'url'),
-      transport: 'http',
-      authType: mode,
-      autoStart: autoEl ? !!autoEl.checked : false,
-    };
-    const id = field(overlay, 'id');
-    if (id) body.id = id;
-    if (!server && !body.id) body.id = deriveId(body.url, body.name);
-    if (!body.url) return { error: '请填写服务地址（URL）' };
-    if (!/^https?:\/\/[^\s]+$/i.test(body.url)) return { error: '服务地址必须是合法的 http(s) URL' };
-    if (!body.name) return { error: '请填写显示名称' };
-
-    if (mode === 'header') {
-      const headerName = field(overlay, 'authHeaderName');
-      if (headerName) body.authHeaderName = headerName;
-    }
-    if (mode !== 'none') {
-      const secret = field(overlay, 'authSecret');
-      const hasOld = !!(server && server.hasAuthSecret);
-      if (!secret && !hasOld) return { error: mode === 'hmac' ? 'MCP-HMAC 模式需要填写 Secret' : '该鉴权模式需要填写 Key' };
-      if (mode === 'hmac') {
-        const keyId = field(overlay, 'authKeyId');
-        if (!keyId && !(server && server.authKeyId)) return { error: 'MCP-HMAC 模式需要填写 Key ID' };
-        if (keyId) body.authKeyId = keyId;
-      }
-      if (secret) body.authSecret = secret;
-    }
-    return { body: body };
-  }
-
-  function deriveId(url, name) {
-    const m = /^https?:\/\/([^/:]+)(?::(\d+))?/i.exec(String(url || ''));
-    if (m) {
-      const host = m[1].toLowerCase() === 'localhost' ? 'local' : m[1].toLowerCase().replace(/[^a-z0-9.-]/g, '');
-      if (m[2]) return 'svc-' + m[2];
-      return (host === 'local' ? 'local' : host.split('.')[0] || 'mcp') ;
-    }
-    return String(name || 'mcp').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'mcp';
-  }
-
-  function openServiceModal(api, server, onDone) {
-    const isEdit = !!server;
-    const overlay = ui.modal({
-      title: isEdit ? `${esc(server.name)} · 编辑配置` : '接入 MCP 服务',
-      desc: isEdit
-        ? (server.builtin ? '内置服务：可改配置、可停用，不可删除。保存后自动重新握手。' : '保存后自动重新握手。')
-        : '三步接入：填地址 → 确认鉴权 → 保存并握手。本机地址默认免鉴权。',
-      body: serviceForm(server),
-      actions: `${ui.btn({ label: '取消', tone: 'ghost', attrs: 'data-modal-close' })}
-        ${ui.btn({ label: isEdit ? '保存并重新握手' : '保存并连接', tone: 'primary', attrs: 'data-mcp-save' })}`,
-    });
-    bindServiceForm(overlay, { isEdit: isEdit });
-
-    overlay.addEventListener('click', async function (e) {
-      if (!e.target.closest('[data-mcp-save]')) return;
-      const collected = collectBody(overlay, server);
-      if (collected.error) { toast(collected.error, 'warn'); return; }
-
-      const btn = overlay.querySelector('[data-mcp-save]');
-      if (btn) btn.disabled = true;
-      const body = collected.body;
-      const res = isEdit ? await api.update(server.id, body) : await api.create(body);
-      if (btn) btn.disabled = false;
-
-      if (!res.ok) {
-        toast((isEdit ? '保存失败：' : '接入失败：') + (res.error || '服务未连接'), 'warn');
-        return;
-      }
-      overlay.close();
-      const connected = res.data && res.data.connected;
-      toast(
-        isEdit
-          ? (connected === false ? '配置已保存，握手失败（可稍后重试）' : '配置已保存并重新握手成功')
-          : (connected === false ? '已登记，握手失败（可稍后重新连接）' : '接入成功，已握手并拉取工具'),
-        connected === false ? 'warn' : 'success'
-      );
-      onDone();
-    });
-  }
-
-  /* ------------------------------ 页面注册 ------------------------------ */
+  /* ------------------------------ 页面骨架 ------------------------------ */
 
   pages.mcp = {
     title: 'MCP 插件管理',
-    subtitle: '内置 / 外部服务接入、状态与调试',
-    actions: ui.btn({ label: '接入 MCP 服务', icon: 'plus', tone: 'primary', attrs: 'data-mcp-add' }),
+    subtitle: '全局 MCP 服务接入、鉴权与在线调试 · 实时数据',
+    actions: '',
 
-    render(ctx) {
-      const live = ctx.data.mcpSource === 'live' && ctx.data.mcp;
-      const mcp = live ? ctx.data.mcp : { stats: EMPTY_STATS, servers: [] };
-      return `<div class="mcp-page">
-        <div class="mcp-main">
-          <div class="mcp-stats" data-mcp-stats>${mcp.stats.map(statCard).join('')}</div>
-          <div class="mcp-toolbar">
-            ${ui.segmented(SCOPES, 'all', 'data-mcp-scope')}
-            ${ui.segmented(STATES, 'all', 'data-mcp-state')}
-            <div class="mcp-toolbar__right">
-              <span class="mcp-last" data-mcp-last>最近检测 —</span>
-              ${ui.btn({ label: '全部健康探测', tone: 'ghost', size: 'sm', icon: 'refresh', attrs: 'data-mcp-probe' })}
-              ${ui.searchBox({ placeholder: '搜索名称 / 地址 / 工具…', width: '190px', attrs: 'data-mcp-search' })}
+    render() {
+      return `<div class="mcp-gw" data-mcp-root>
+        <aside class="mcp-gw-side">
+          <div class="mcp-gw-side-head">
+            <div class="mcp-gw-side-title">
+              ${ui.icon('server', 15)}
+              <span>全局 MCP 服务 <em>(Global MCP Servers)</em></span>
             </div>
+            <button type="button" class="mcp-gw-new" data-mcp-new>${ui.icon('plus', 13)} 接入新服务</button>
           </div>
-          <div class="mcp-sections" data-mcp-grid></div>
-        </div>
-        <div class="mcp-backdrop" data-mcp-backdrop hidden></div>
-        <aside class="mcp-drawer" data-mcp-drawer aria-hidden="true" tabindex="-1"></aside>
+          <label class="mcp-gw-search">${ui.icon('search', 14)}
+            <input class="input" placeholder="搜索服务..." data-mcp-search autocomplete="off" />
+          </label>
+          <div class="mcp-gw-list" data-mcp-list>
+            <div class="mcp-gw-loading">正在读取服务...</div>
+          </div>
+        </aside>
+        <section class="mcp-gw-main" data-mcp-editor>
+          <div class="mcp-gw-loading">正在读取全局 MCP 配置...</div>
+        </section>
       </div>`;
     },
 
     mount(root, ctx) {
-      const api = mcpApi();
-      const statsEl = root.querySelector('[data-mcp-stats]');
-      const grid = root.querySelector('[data-mcp-grid]');
-      const lastEl = root.querySelector('[data-mcp-last]');
-      const drawer = root.querySelector('[data-mcp-drawer]');
-      const backdrop = root.querySelector('[data-mcp-backdrop]');
-      const probeBtn = root.querySelector('[data-mcp-probe]');
-      const search = root.querySelector('[data-mcp-search]');
-      const scopeBtns = root.querySelectorAll('[data-mcp-scope]');
-      const stateBtns = root.querySelectorAll('[data-mcp-state]');
+      const api = (WB.api && WB.api.mcp) || null;
+      const listEl = root.querySelector('[data-mcp-list]');
+      const editorEl = root.querySelector('[data-mcp-editor]');
+      const searchEl = root.querySelector('[data-mcp-search]');
 
-      let servers = [];
-      let connected = false;
-      const state = { serviceId: '', scope: 'all', stateFilter: 'all', keyword: '' };
-
-      /* 浮层 portal：页面入场动画的 transform 会让 fixed 锚定到页面区，
-         挪到 body 才能贴住视口；切页/重渲染时按挂载令牌回收，避免残留。 */
-      document.body.appendChild(backdrop);
-      document.body.appendChild(drawer);
-      const portalToken = 'mcp-portal-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-      root.dataset.mcpPortal = portalToken;
-      const portalObserver = new MutationObserver(function () {
-        if (root.dataset.mcpPortal === portalToken && root.querySelector('.mcp-page')) return;
-        backdrop.remove();
-        drawer.remove();
-        document.removeEventListener('keydown', onKeydown);
-        portalObserver.disconnect();
-      });
-      portalObserver.observe(root, { childList: true });
-
-      function onKeydown(e) {
-        if (e.key === 'Escape' && drawer.classList.contains('is-open')) closeDrawer();
-      }
-      document.addEventListener('keydown', onKeydown);
-
-      const current = function () {
-        return servers.find(function (s) { return s.id === state.serviceId; }) || servers[0] || null;
+      const state = {
+        servers: [],
+        selectedId: null,
+        isNew: false,
+        loading: true,
+        connected: false,
+        keyword: '',
+        draft: blankDraft(),
+        terminal: '',
+        busy: false,
       };
+
+      function findServer(id) {
+        return state.servers.find(function (s) { return s.id === id; }) || null;
+      }
+
+      function current() {
+        return findServer(state.selectedId);
+      }
 
       function updateSubtitle() {
         const el = document.querySelector('.page-subtitle');
         if (el) {
-          el.textContent = '内置 / 外部服务接入、状态与调试 · ' +
-            (connected ? '实时数据' : '本地服务未连接（' + ((ctx.data.app && ctx.data.app.endpoint) || '127.0.0.1:5301') + '）');
+          el.textContent = '全局 MCP 服务接入、鉴权与在线调试 · ' +
+            (state.connected ? '实时数据' : '本地服务未连接（' + ((ctx.data.app && ctx.data.app.endpoint) || '127.0.0.1:5301') + '）');
         }
       }
 
-      function lastCheckedAt() {
-        let max = 0;
-        servers.forEach(function (s) {
-          [s.toolsFetchedAt, s.connectedAt].forEach(function (t) {
-            const n = t ? new Date(t).getTime() : 0;
-            if (n > max) max = n;
-          });
-        });
-        return max ? new Date(max) : null;
-      }
-
-      function paintStats() {
-        if (!statsEl) return;
-        const stats = (ctx.data.mcpSource === 'live' && ctx.data.mcp && ctx.data.mcp.stats) ? ctx.data.mcp.stats : EMPTY_STATS;
-        statsEl.innerHTML = stats.map(statCard).join('');
-        if (lastEl) {
-          const at = lastCheckedAt();
-          lastEl.textContent = at ? '最近检测 ' + fmtTime(at) : '最近检测 —';
-        }
-      }
-
-      function filtered() {
-        const kw = state.keyword;
-        return servers.filter(function (s) {
-          const st = stateInfo(s);
-          if (state.scope === 'builtin' && !s.builtin) return false;
-          if (state.scope === 'external' && s.builtin) return false;
-          if (state.stateFilter === 'online' && !s.online) return false;
-          if (state.stateFilter === 'offline' && (s.online || st.label === '已停用')) return false;
-          if (state.stateFilter === 'disabled' && st.label !== '已停用') return false;
-          if (kw) {
-            const hay = [s.name, s.id, s.url, s.authLabel, (s.toolNames || []).join(' ')]
-              .join(' ').toLowerCase();
-            if (hay.indexOf(kw) === -1) return false;
-          }
-          return true;
-        });
-      }
-
-      function paintGrid() {
-        const rows = filtered();
-        if (!servers.length) {
-          grid.innerHTML = emptyHtml(connected ? '还没有接入任何 MCP 服务' : '本地服务未连接，无法加载清单', true);
+      function paintList() {
+        if (!listEl) return;
+        if (state.loading) {
+          listEl.innerHTML = '<div class="mcp-gw-loading">正在读取服务...</div>';
           return;
         }
+        if (!state.connected) {
+          listEl.innerHTML = `<div class="mcp-gw-empty">
+            ${ui.icon('wifi', 22)}
+            <div class="mcp-gw-empty-title">本地服务未连接</div>
+            <div class="mcp-gw-empty-desc">无法读取 MCP 清单，请确认 5301 端口服务已启动。</div>
+            <button type="button" class="mcp-gw-retry" data-mcp-reload>重新加载</button>
+          </div>`;
+          return;
+        }
+        const kw = String(state.keyword || '').trim().toLowerCase();
+        const rows = (state.servers || []).filter(function (s) {
+          return !kw || [s.name, s.id, s.url, s.authLabel].join(' ').toLowerCase().indexOf(kw) !== -1;
+        });
         if (!rows.length) {
-          grid.innerHTML = emptyHtml('没有匹配的服务', false);
+          listEl.innerHTML = `<div class="mcp-gw-empty">
+            ${ui.icon('plugin', 22)}
+            <div class="mcp-gw-empty-title">${state.servers.length ? '没有匹配的服务' : '还没有接入 MCP 服务'}</div>
+            <div class="mcp-gw-empty-desc">${state.servers.length ? '换个关键词试试。' : '点右上角「+ 接入新服务」开始。'}</div>
+          </div>`;
           return;
         }
-        grid.innerHTML = sectionsHtml(rows);
+        listEl.innerHTML = rows.map(function (server) {
+          const meta = stateMeta(server);
+          const on = !state.isNew && server.id === state.selectedId;
+          return `<button type="button" class="mcp-gw-card${on ? ' is-on' : ''}" data-mcp-select="${esc(server.id)}">
+            <div class="mcp-gw-card-name">
+              <span>${esc(server.name || server.id)}</span>
+              ${server.builtin ? '<i class="mcp-gw-tag">内置</i>' : ''}
+            </div>
+            <div class="mcp-gw-card-status">
+              <i class="mcp-gw-dot is-${esc(meta.dot)}"></i>${esc(meta.label)}
+            </div>
+            <div class="mcp-gw-card-url mono" title="${esc(server.url || '')}">${esc(server.url || '未配置 Endpoint')}</div>
+          </button>`;
+        }).join('');
       }
 
-      function paintDrawer() {
-        const server = current();
-        if (!server) { drawer.innerHTML = ''; return; }
-        drawer.innerHTML = drawerHtml(server);
-        paintTerm();
-      }
-
-      function paintTerm() {
-        const server = current();
-        const term = drawer.querySelector('[data-mcp-term]');
-        if (!server || !term) return;
-        const lines = ['{', '  "method": "tools/list",', '  "server": ' + JSON.stringify(server.id) + ',', '  "tools": ['];
-        const meta = server.toolsMeta || [];
-        meta.forEach(function (t, i) {
-          lines.push('    ' + JSON.stringify({ name: t.name, risk: t.risk || null, description: t.description }) + (i < meta.length - 1 ? ',' : ''));
-        });
-        if (!meta.length) lines.push('    // ' + (server.online ? '服务未返回工具' : '尚未握手，暂无工具清单'));
-        lines.push('  ]', '}');
-        term.innerHTML = lines.map(lineHtml).join('');
-      }
-
-      function paintAll() {
-        servers = (ctx.data.mcpSource === 'live' && ctx.data.mcp) ? (ctx.data.mcp.servers || []).slice() : [];
-        if (!servers.some(function (s) { return s.id === state.serviceId; })) {
-          state.serviceId = servers[0] ? servers[0].id : '';
+      function headerRowsHtml() {
+        if (!(state.draft.headers || []).length) {
+          return '<div class="mcp-gw-headers-empty" data-mcp-headers-empty>暂无自定义请求头。企业网关的租户 / 路由头可在这里追加。</div>';
         }
-        if (!servers.length) closeDrawer();
-        paintStats();
-        paintGrid();
-        if (drawer.classList.contains('is-open')) paintDrawer();
+        return state.draft.headers.map(function (row, i) {
+          return `<div class="mcp-gw-header-row" data-mcp-header-row="${i}">
+            <input class="input" placeholder="Header 名称，如 X-Tenant-Id" value="${esc(row.key)}" data-mcp-header-key autocomplete="off" />
+            <input class="input" type="password" placeholder="${row.key ? '值（留空沿用已保存值）' : '值'}" value="${esc(row.value)}" data-mcp-header-value autocomplete="new-password" />
+            <button type="button" class="mcp-gw-header-del" data-mcp-header-del="${i}" title="移除">×</button>
+          </div>`;
+        }).join('');
+      }
+
+      function authFieldsHtml(server) {
+        const draft = state.draft;
+        const hasSecret = !!(server && server.hasAuthSecret);
+        if (draft.authType === 'none') {
+          return '<div class="mcp-gw-field-hint">免签模式：不发送任何鉴权头。需要租户 / 路由头时，在下方「自定义 Header」中追加。</div>';
+        }
+        if (draft.authType === 'bearer') {
+          return `<label class="field"><span class="field-label">Bearer Token</span>
+            <input class="input" type="password" data-mcp-secret value="${esc(draft.authSecret)}"
+              placeholder="${hasSecret ? '已配置，留空沿用' : '必填'}" autocomplete="new-password" />
+          </label>`;
+        }
+        return `<div class="mcp-gw-grid2">
+          <label class="field"><span class="field-label">Key ID</span>
+            <input class="input" data-mcp-key-id value="${esc(draft.authKeyId)}" placeholder="如 wizstar-local" autocomplete="off" />
+          </label>
+          <label class="field"><span class="field-label">Secret</span>
+            <input class="input" type="password" data-mcp-secret value="${esc(draft.authSecret)}"
+              placeholder="${hasSecret ? '已配置，留空沿用' : '必填'}" autocomplete="new-password" />
+          </label>
+        </div>
+        <div class="mcp-gw-field-hint">HMAC 签名绑定请求体，仅建议跨公网的高危服务使用。</div>`;
+      }
+
+      function editorHtml(server) {
+        const draft = state.draft;
+        const meta = stateMeta(server);
+        const isNew = state.isNew || !server;
+        const disabled = !!(server && String(server.state || '').toLowerCase() === 'disabled');
+        const builtin = !!(server && server.builtin);
+        const statusBadge = ui.badge(meta.label, { tone: meta.tone, dot: true });
+
+        return `<div class="mcp-gw-main-head">
+          <div class="mcp-gw-main-title">
+            ${ui.icon('settings', 15)}
+            <span>全局 MCP 配置 <em>(Global MCP Configuration)</em></span>
+            <span class="mcp-gw-main-id mono">${esc(isNew ? 'new-server' : server.id)}</span>
+          </div>
+          <div class="mcp-gw-main-state">
+            ${statusBadge}
+            ${builtin ? ui.badge('内置服务', { tone: 'violet' }) : ''}
+            ${server ? `<button type="button" class="mcp-gw-power" data-mcp-toggle title="${disabled ? '重新握手并启用' : '断开连接但保留清单'}">
+              ${ui.icon('power', 13)} ${disabled ? '启用服务' : '停用服务'}
+            </button>` : ''}
+          </div>
+        </div>
+
+        <div class="mcp-gw-main-body">
+          ${server && server.lastError && !server.online ? `<div class="mcp-alert">${esc(server.lastError)}</div>` : ''}
+
+          <section class="mcp-gw-section">
+            <div class="mcp-gw-section-title">基本配置 <span>(Basic Configuration)</span></div>
+            <div class="mcp-gw-grid2">
+              <label class="field"><span class="field-label">服务名称 (Name)</span>
+                <input class="input" data-mcp-name value="${esc(draft.name)}" placeholder="如 supplier-1688（1688供应链专线）" autocomplete="off" />
+              </label>
+              <label class="field"><span class="field-label">服务 ID (Server ID)</span>
+                <input class="input" data-mcp-id value="${esc(isNew ? draft.id : server.id)}" placeholder="${isNew ? '留空按 URL 自动生成' : '不可修改'}"
+                  ${isNew ? '' : 'disabled'} autocomplete="off" />
+              </label>
+            </div>
+            <div class="field mcp-gw-url-field">
+              <span class="field-label">服务 URL (Endpoint)</span>
+              <div class="mcp-gw-url-row">
+                <input class="input mono" data-mcp-url value="${esc(draft.url)}" placeholder="http://127.0.0.1:5207" autocomplete="off" />
+                <button type="button" class="mcp-gw-connect" data-mcp-connect>${ui.icon('wifi', 13)} 探活 &amp; 连接</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="mcp-gw-section">
+            <div class="mcp-gw-section-title">鉴权方式 <span>(Auth Settings)</span></div>
+            <div class="mcp-gw-auth">
+              ${AUTH_MODES.map(function (mode) {
+                return `<label class="mcp-gw-radio">
+                  <input type="radio" name="mcp-gw-auth" value="${mode.id}"${draft.authType === mode.id ? ' checked' : ''} />
+                  <span>${esc(mode.label)}</span>
+                </label>`;
+              }).join('')}
+            </div>
+            ${authFieldsHtml(server)}
+            ${server && String(server.authType || '').toLowerCase() === 'header'
+              ? '<div class="mcp-gw-field-hint is-warn">该服务当前使用旧版「自定义 Header」鉴权；本页仅展示三档标准鉴权，保存后会切换为免签，请改用自定义 Header 或 Bearer。</div>'
+              : ''}
+          </section>
+
+          <section class="mcp-gw-section">
+            <div class="mcp-gw-section-head">
+              <div class="mcp-gw-section-title">自定义 Header <span>(Custom Headers)</span></div>
+              <button type="button" class="mcp-gw-linkbtn" data-mcp-header-add>${ui.icon('plus', 12)} 添加 Header</button>
+            </div>
+            <div class="mcp-gw-headers" data-mcp-headers>${headerRowsHtml()}</div>
+          </section>
+
+          <section class="mcp-gw-section mcp-gw-term-section">
+            <div class="mcp-gw-section-head">
+              <div class="mcp-gw-section-title">在线调试终端 <span>(Terminal)</span></div>
+              <button type="button" class="mcp-gw-probe" data-mcp-probe>${ui.icon('play', 12)} 探活 &amp; 抓取 Schema</button>
+            </div>
+            <pre class="mcp-gw-term" data-mcp-term></pre>
+          </section>
+        </div>
+
+        <div class="mcp-gw-foot">
+          <button type="button" class="mcp-gw-delete" data-mcp-delete
+            ${isNew || builtin || !server ? 'disabled' : ''}
+            title="${builtin ? '内置服务不可删除：可改配置或停用' : (isNew ? '新建服务保存后才有删除入口' : '从声明清单移除并停用')}">
+            ${ui.icon('trash', 13)} 删除服务
+          </button>
+          <span class="mcp-gw-note">${builtin ? '内置服务：可改配置 / 可停用，不可删除' : (isNew ? '保存后写入声明式清单并自动握手' : '外部服务：支持完整增删改')}</span>
+          <span class="mcp-gw-foot-spacer"></span>
+          <button type="button" class="mcp-gw-save" data-mcp-save>${isNew ? '保存配置 &amp; 首次握手' : '保存配置 &amp; 重启服务'}</button>
+        </div>`;
+      }
+
+      function defaultTerminal() {
+        if (!state.draft.url) return '$ 填写 Endpoint 后点击「探活 & 抓取 Schema」\n# 终端会打印 initialize / tools/list 的原始 JSON 报文';
+        return '$ mcp-cli ping --url ' + state.draft.url + '\n# 点击「探活 & 抓取 Schema」发起 initialize + tools/list，原始 JSON 会打印在这里。';
+      }
+
+      function paintTerminal() {
+        const term = editorEl.querySelector('[data-mcp-term]');
+        if (!term) return;
+        const text = state.terminal || defaultTerminal();
+        term.innerHTML = text.split('\n').map(hlLine).join('\n');
+        term.scrollTop = term.scrollHeight;
+      }
+
+      function paintEditor() {
+        if (!editorEl) return;
+        if (state.loading) {
+          editorEl.innerHTML = '<div class="mcp-gw-loading">正在读取全局 MCP 配置...</div>';
+          return;
+        }
+        if (!state.connected) {
+          editorEl.innerHTML = `<div class="mcp-gw-editor-empty">
+            ${ui.icon('wifi', 26)}
+            <div class="mcp-gw-editor-empty-title">本地服务未连接</div>
+            <div class="mcp-gw-editor-empty-desc">MCP 清单与在线调试依赖 5301 端口的本地 API 服务。</div>
+            <button type="button" class="mcp-gw-retry" data-mcp-reload>重新加载</button>
+          </div>`;
+          return;
+        }
+        if (state.isNew) {
+          state.draft = state.draft || blankDraft();
+          editorEl.innerHTML = editorHtml(null);
+          paintTerminal();
+          return;
+        }
+        const server = current();
+        if (!server) {
+          editorEl.innerHTML = `<div class="mcp-gw-editor-empty">
+            ${ui.icon('plugin', 26)}
+            <div class="mcp-gw-editor-empty-title">选择一个 MCP 服务</div>
+            <div class="mcp-gw-editor-empty-desc">从左侧选择服务，或点「+ 接入新服务」声明新的网关。</div>
+          </div>`;
+          return;
+        }
+        editorEl.innerHTML = editorHtml(server);
+        paintTerminal();
+      }
+
+      function paint() {
+        paintList();
+        paintEditor();
         updateSubtitle();
       }
 
-      function openDrawer(server) {
-        if (!server) return;
-        state.serviceId = server.id;
-        paintGrid();
-        paintDrawer();
-        drawer.classList.add('is-open');
-        drawer.setAttribute('aria-hidden', 'false');
-        backdrop.hidden = false;
-        try { drawer.focus({ preventScroll: true }); } catch (_) { /* 焦点失败不影响打开 */ }
+      function collectDraft() {
+        const draft = state.draft;
+        const q = function (sel) { return editorEl.querySelector(sel); };
+        const nameEl = q('[data-mcp-name]');
+        const idEl = q('[data-mcp-id]');
+        const urlEl = q('[data-mcp-url]');
+        const keyEl = q('[data-mcp-key-id]');
+        const secretEl = q('[data-mcp-secret]');
+        if (nameEl) draft.name = String(nameEl.value || '').trim();
+        if (idEl) draft.id = String(idEl.value || '').trim();
+        if (urlEl) draft.url = String(urlEl.value || '').trim();
+        if (keyEl) draft.authKeyId = String(keyEl.value || '').trim();
+        if (secretEl) draft.authSecret = String(secretEl.value || '');
+        draft.headers = Array.prototype.map.call(editorEl.querySelectorAll('[data-mcp-header-row]'), function (row) {
+          const key = row.querySelector('[data-mcp-header-key]');
+          const value = row.querySelector('[data-mcp-header-value]');
+          return {
+            key: String((key && key.value) || '').trim(),
+            value: String((value && value.value) || ''),
+          };
+        });
+        return draft;
       }
 
-      function closeDrawer() {
-        drawer.classList.remove('is-open');
-        drawer.setAttribute('aria-hidden', 'true');
-        backdrop.hidden = true;
+      function buildPayload(opts) {
+        collectDraft();
+        const draft = state.draft;
+        const isNew = state.isNew;
+        const name = String(draft.name || '').trim();
+        const url = String(draft.url || '').trim();
+        if (!url) return { error: '请填写服务 URL (Endpoint)' };
+        if (!/^https?:\/\/[^\s]+$/i.test(url)) return { error: '服务 URL 必须是合法的 http(s) 地址' };
+        if (!opts.probe && !name) return { error: '请填写服务名称 (Name)' };
+
+        let id = isNew ? String(draft.id || '').trim() : String(state.selectedId || '');
+        if (isNew && !id) id = deriveId(url, name);
+        if (!opts.probe && !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) {
+          return { error: '服务 ID 只允许小写字母 / 数字 / ._-，且以字母或数字开头' };
+        }
+
+        const mode = draft.authType;
+        const hasOldSecret = !!(current() && current().hasAuthSecret);
+        const hasOldKeyId = !!(current() && current().authKeyId);
+        if (mode === 'bearer' && !String(draft.authSecret || '').trim() && !hasOldSecret) {
+          return { error: 'Bearer 模式需要填写 Token' };
+        }
+        if (mode === 'hmac') {
+          if (!String(draft.authKeyId || '').trim() && !hasOldKeyId) return { error: 'HMAC 模式需要填写 Key ID' };
+          if (!String(draft.authSecret || '').trim() && !hasOldSecret) return { error: 'HMAC 模式需要填写 Secret' };
+        }
+
+        const headers = {};
+        (draft.headers || []).forEach(function (row) {
+          const key = String(row.key || '').trim();
+          if (key) headers[key] = String(row.value || '');
+        });
+
+        const body = {
+          name: name || String((current() && current().name) || id),
+          transport: 'http',
+          url: url,
+          autoStart: current() ? !!current().autoStart : true,
+          authType: mode,
+          headers: headers,
+        };
+        if (id) body.id = id;
+        if (mode === 'hmac') {
+          if (String(draft.authKeyId || '').trim()) body.authKeyId = String(draft.authKeyId).trim();
+          if (String(draft.authSecret || '').trim()) body.authSecret = String(draft.authSecret);
+        } else if (mode === 'bearer') {
+          if (String(draft.authSecret || '').trim()) body.authSecret = String(draft.authSecret);
+        }
+        return { body: body, id: id };
       }
 
-      async function reload(silent) {
+      function appendTerm(text) {
+        state.terminal = state.terminal ? state.terminal + '\n' + text : text;
+        paintTerminal();
+      }
+
+      function setBusy(busy, selector, busyText) {
+        state.busy = !!busy;
+        const btn = selector ? editorEl.querySelector(selector) : null;
+        if (!btn) return;
+        if (busy) {
+          if (!btn.dataset.busyHtml) btn.dataset.busyHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner"></span>' + esc(busyText || '处理中...');
+        } else {
+          btn.disabled = false;
+          if (btn.dataset.busyHtml) {
+            btn.innerHTML = btn.dataset.busyHtml;
+            delete btn.dataset.busyHtml;
+          }
+        }
+      }
+
+      async function load(opts) {
+        const silent = !!(opts && opts.silent);
+        if (!silent) {
+          state.loading = true;
+          paint();
+        }
         if (!api || !WB.api.available()) {
-          connected = false;
-          servers = [];
-          paintAll();
+          state.loading = false;
+          state.connected = false;
+          state.servers = [];
+          paint();
           return false;
         }
         let res;
         try { res = await api.load(); } catch (_) { res = { ok: false, error: '请求异常' }; }
+        state.loading = false;
         if (!res.ok) {
-          connected = false;
-          servers = [];
-          paintAll();
+          state.connected = false;
+          state.servers = [];
+          paint();
           if (!silent) toast('加载失败：' + (res.error || '本地服务未连接'), 'warn');
           return false;
         }
-        connected = true;
-        api.apply(res.servers, res.tools);
-        paintAll();
+        state.connected = true;
+        state.servers = api.apply(res.servers, res.tools) || [];
+        const target = state.servers.find(function (s) { return s.id === state.selectedId; }) || state.servers[0] || null;
+        if (target) {
+          state.selectedId = target.id;
+          state.isNew = false;
+          state.draft = draftFromServer(target);
+        } else if (!state.isNew) {
+          state.selectedId = null;
+          state.isNew = true;
+          state.draft = blankDraft();
+        }
+        paint();
         return true;
       }
 
-      /* ------------------------------ 动作 ------------------------------ */
-
-      async function doHandshake(server) {
-        toast('正在与 ' + server.name + ' 握手…', 'info');
+      async function runProbe() {
+        if (state.busy) return;
+        const built = buildPayload({ probe: true });
+        if (built.error) { toast(built.error, 'warn'); return; }
+        const body = built.body;
+        const started = Date.now();
+        setBusy(true, '[data-mcp-probe]', '探活中...');
+        appendTerm('$ mcp-cli ping --url ' + body.url);
+        appendTerm('[' + stamp() + '] → POST ' + body.url.replace(/\/$/, '') + '/mcp  (initialize → tools/list)');
         let res;
-        try { res = await api.handshake(server.id); } catch (_) { res = { ok: false, error: '请求异常' }; }
+        try { res = await api.probe(body); } catch (_) { res = { ok: false, error: '请求异常' }; }
+        setBusy(false, '[data-mcp-probe]', '');
+        const ms = Date.now() - started;
         if (!res.ok) {
-          toast('握手失败：' + (res.error || '服务不可达'), 'warn');
-          await reload(true);
+          appendTerm('[' + stamp() + '] ← ERROR ' + (res.error || '探活失败'));
+          toast('探活失败：' + (res.error || '服务不可达'), 'warn');
           return;
         }
-        toast(server.name + ' · 握手成功', 'success');
-        await reload(true);
+        const data = res.data || {};
+        appendTerm('[' + stamp() + '] ← 200 OK (' + ms + 'ms) · protocol=' + (data.protocolVersion || '?') +
+          ' · server=' + (data.serverName || '?') + (data.serverVersion ? ' ' + data.serverVersion : ''));
+        appendTerm('[' + stamp() + '] initialize (raw):');
+        appendTerm(pretty(data.raw && data.raw.initialize));
+        appendTerm('[' + stamp() + '] tools/list (raw):');
+        appendTerm(pretty(data.raw && data.raw.toolsList));
+        appendTerm('[' + stamp() + '] 已加载工具 (' + (data.toolCount || 0) + '): ' +
+          (data.tools || []).map(function (t) { return t.name; }).join(', '));
+        toast('探活成功 · ' + (data.toolCount || 0) + ' 个工具', 'success');
       }
 
-      async function doReconcile(btn) {
-        if (!btn || btn.disabled) return;
-        const original = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span><span>探测中…</span>';
+      async function saveServer() {
+        if (state.busy) return;
+        const built = buildPayload({ probe: false });
+        if (built.error) { toast(built.error, 'warn'); return; }
+        const body = built.body;
+        const isNew = state.isNew;
+        setBusy(true, '[data-mcp-save]', '保存中...');
         let res;
-        try { res = await api.reconcile(); } catch (_) { res = { ok: false, error: '请求异常' }; }
-        btn.disabled = false;
-        btn.innerHTML = original;
-
+        try {
+          res = isNew ? await api.create(body) : await api.update(state.selectedId, body);
+        } catch (_) { res = { ok: false, error: '请求异常' }; }
+        setBusy(false, '[data-mcp-save]', '');
         if (!res.ok) {
-          toast('探测失败：' + (res.error || '本地服务未连接'), 'warn');
-          await reload(true);
+          appendTerm('[' + stamp() + '] ← 保存失败：' + (res.error || '服务未连接'));
+          toast((isNew ? '接入失败：' : '保存失败：') + (res.error || '服务未连接'), 'warn');
           return;
         }
-        const s = res.data || {};
-        toast('对账完成：新增 ' + (s.added || 0) + ' / 刷新 ' + (s.refreshed || 0) +
-          ' / 移除 ' + (s.removed || 0) + ' / 失败 ' + (s.failed || 0), Number(s.failed) > 0 ? 'warn' : 'success');
-        await reload(true);
+        const data = res.data || {};
+        const id = data.id || built.id;
+        state.selectedId = id;
+        state.isNew = false;
+        appendTerm('[' + stamp() + '] ← 配置已写入清单 · ' + (data.connected ? '握手成功' : '握手失败'));
+        appendTerm(pretty(data.snapshot || data));
+        await load({ silent: true });
+        toast(data.connected
+          ? (isNew ? '接入成功，已握手并拉取工具' : '配置已保存并重新握手成功')
+          : '配置已保存，但握手失败（可稍后重试）', data.connected ? 'success' : 'warn');
       }
 
-      async function doDisconnect(server) {
-        const ok = await ui.confirm({
-          title: '停用 ' + server.name + '？',
-          desc: '运行时停用：清空工具缓存、状态置为已停用；清单保留，随时可重新启用。',
-          ok: '停用',
-          tone: 'danger',
-        });
-        if (!ok) return;
-        const res = await api.disconnect(server.id);
-        if (!res.ok) { toast('停用失败：' + (res.error || '服务未连接'), 'warn'); return; }
-        toast(server.name + ' 已停用（可随时启用）', 'success');
-        await reload(true);
+      async function probeAndSave() {
+        if (state.busy) return;
+        const built = buildPayload({ probe: false });
+        if (built.error) { toast(built.error, 'warn'); return; }
+        await saveServer();
       }
 
-      async function doDelete(server) {
-        if (server.builtin) { toast('内置服务不可删除：可停用或修改配置', 'warn'); return; }
+      async function toggleServer() {
+        const server = current();
+        if (!server || state.busy) return;
+        const disabled = String(server.state || '').toLowerCase() === 'disabled';
+        if (!disabled) {
+          const ok = await ui.confirm({
+            title: '停用 ' + server.name + '？',
+            desc: '运行时断开并清空工具缓存，清单保留；随时可点「启用服务」重新握手。',
+            ok: '停用',
+            tone: 'danger',
+          });
+          if (!ok) return;
+          const res = await api.disconnect(server.id);
+          if (!res.ok) { toast('停用失败：' + (res.error || '服务未连接'), 'warn'); return; }
+          toast(server.name + ' 已停用（清单保留）', 'success');
+        } else {
+          const res = await api.handshake(server.id);
+          if (!res.ok) { toast('启用失败：' + (res.error || '服务不可达'), 'warn'); return; }
+          toast(server.name + ' 已启用并握手成功', 'success');
+        }
+        await load({ silent: true });
+      }
+
+      async function deleteServer() {
+        const server = current();
+        if (!server || state.busy) return;
+        if (server.builtin) { toast('内置服务不可删除：可改配置或停用', 'warn'); return; }
         const ok = await ui.confirm({
           title: '删除 ' + server.name + '？',
           desc: '将从声明清单移除该服务并停用运行时（数据保留，可重新接入）。',
@@ -848,170 +656,100 @@
         if (!ok) return;
         const res = await api.remove(server.id);
         if (!res.ok) { toast('删除失败：' + (res.error || '服务未连接'), 'warn'); return; }
-        toast(server.name + ' 已清除', 'success');
-        closeDrawer();
-        await reload(true);
+        state.selectedId = null;
+        state.isNew = false;
+        await load({ silent: true });
+        toast(server.name + ' 已从清单移除', 'success');
       }
 
-      function appendTermLine(term, text) {
-        const line = document.createElement('div');
-        line.className = 'mcp-t-line mcp-t-line--run';
-        line.innerHTML = hlLine(text);
-        term.appendChild(line);
-        term.scrollTop = term.scrollHeight;
-      }
-
-      async function runTest() {
-        const server = current();
-        const term = drawer.querySelector('[data-mcp-term]');
-        if (!server || !term) return;
-        const stamp = new Date().toTimeString().slice(0, 8);
-        if (!server.online) {
-          appendTermLine(term, `[${stamp}] 服务未连接（${stateInfo(server).label}），未发起请求`);
-          toast(server.name + ' 未连接，无法调试', 'warn');
-          return;
-        }
-        const sel = drawer.querySelector('[data-mcp-tool]');
-        const argsInput = drawer.querySelector('[data-mcp-args]');
-        const name = sel ? String(sel.value || '') : '';
-        if (!name) { appendTermLine(term, `[${stamp}] 该服务未登记工具，无法调用`); return; }
-
-        let args = {};
-        const raw = String((argsInput && argsInput.value) || '').trim();
-        if (raw) {
-          try { args = JSON.parse(raw); } catch (_) {
-            appendTermLine(term, `[${stamp}] 参数不是合法 JSON：${raw}`);
-            toast('调用参数必须是合法 JSON 对象', 'warn');
-            return;
-          }
-        }
-
-        const btn = drawer.querySelector('[data-mcp-run]');
-        if (btn) btn.disabled = true;
-        const started = Date.now();
-        let res;
-        try { res = await api.callTool({ serverId: server.id, name: name, arguments: args }); }
-        catch (_) { res = { ok: false, error: '请求异常' }; }
-        if (btn) btn.disabled = false;
-
-        appendTermLine(term, `[${stamp}] tools/call ${server.id}/${name} 参数=${JSON.stringify(args)}（前端 ${Date.now() - started}ms）`);
-        if (!res.ok) {
-          appendTermLine(term, JSON.stringify({ success: false, error: res.error || '调用失败' }));
-          toast('调用失败：' + (res.error || '服务未连接'), 'warn');
-          return;
-        }
-        appendTermLine(term, JSON.stringify(res.data));
-        toast(server.name + ' · ' + name + ' 调用成功', 'success');
-      }
-
-      async function copyDebugCurl() {
-        const server = current();
+      function selectServer(id) {
+        const server = findServer(id);
         if (!server) return;
-        const sel = drawer.querySelector('[data-mcp-tool]');
-        const tool = sel ? String(sel.value || '') : '';
-        let res;
-        try { res = await api.debugCurl(server.id, tool || undefined); } catch (_) { res = { ok: false }; }
-        if (!res.ok || !res.data || !res.data.curl) {
-          toast('生成失败：' + (res.error || '本地服务未连接'), 'warn');
-          return;
-        }
-        const text = res.data.curl;
-        const hmac = String(res.data.authType || '') === 'hmac';
-        const okMsg = '调试 cURL 已复制' + (hmac ? '（签名 ±300s 内有效）' : '');
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(function () { toast(okMsg, 'success'); },
-              function () { toast('复制失败，请手动选中终端文本复制', 'warn'); });
-            return;
-          }
-        } catch (_) { /* 降级提示 */ }
-        toast('当前环境不支持自动复制', 'warn');
+        state.selectedId = id;
+        state.isNew = false;
+        state.draft = draftFromServer(server);
+        state.terminal = '';
+        paint();
       }
 
       /* ------------------------------ 事件 ------------------------------ */
 
-      grid.addEventListener('click', function (e) {
-        if (e.target.closest('[data-mcp-add]')) {
-          openServiceModal(api, null, function () { reload(true); });
+      root.addEventListener('click', function (e) {
+        if (e.target.closest('[data-mcp-new]')) {
+          state.isNew = true;
+          state.selectedId = null;
+          state.draft = blankDraft();
+          state.terminal = '';
+          paint();
           return;
         }
-        const row = e.target.closest('[data-server]');
-        if (!row) return;
-        const server = servers.find(function (s) { return s.id === row.dataset.server; });
-        if (!server) return;
-        const act = e.target.closest('[data-act]');
-        if (act) {
-          e.stopPropagation();
-          if (act.dataset.act === 'debug') openDrawer(server);
-          else if (act.dataset.act === 'handshake') doHandshake(server);
-          else if (act.dataset.act === 'config') openServiceModal(api, server, function () { reload(true); });
+        if (e.target.closest('[data-mcp-reload]')) {
+          load();
           return;
         }
-        openDrawer(server);
-      });
-
-      grid.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        const row = e.target.closest('[data-server]');
-        if (!row) return;
-        e.preventDefault();
-        const server = servers.find(function (s) { return s.id === row.dataset.server; });
-        if (server) openDrawer(server);
-      });
-
-      scopeBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          scopeBtns.forEach(function (b) { b.classList.toggle('active', b === btn); });
-          state.scope = btn.dataset.mcpScope;
-          paintGrid();
-        });
-      });
-
-      stateBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          stateBtns.forEach(function (b) { b.classList.toggle('active', b === btn); });
-          state.stateFilter = btn.dataset.mcpState;
-          paintGrid();
-        });
-      });
-
-      if (search) {
-        search.addEventListener('input', function () {
-          state.keyword = String(search.value || '').trim().toLowerCase();
-          paintGrid();
-        });
-      }
-
-      if (probeBtn) probeBtn.addEventListener('click', function () { doReconcile(probeBtn); });
-
-      drawer.addEventListener('click', function (e) {
-        const server = current();
-        if (!server) return;
-        if (e.target.closest('[data-mcp-close]')) { closeDrawer(); return; }
-        if (e.target.closest('[data-mcp-run]')) { runTest(); return; }
-        if (e.target.closest('[data-mcp-curl]')) { copyDebugCurl(); return; }
-        if (e.target.closest('[data-mcp-handshake]')) { doHandshake(server); return; }
-        if (e.target.closest('[data-mcp-edit]')) { openServiceModal(api, server, function () { reload(true); }); return; }
+        const card = e.target.closest('[data-mcp-select]');
+        if (card) {
+          selectServer(card.dataset.mcpSelect);
+          return;
+        }
+        if (e.target.closest('[data-mcp-header-add]')) {
+          collectDraft();
+          state.draft.headers.push({ key: '', value: '' });
+          paintEditor();
+          const rows = editorEl.querySelectorAll('[data-mcp-header-key]');
+          if (rows.length) rows[rows.length - 1].focus();
+          return;
+        }
+        const delHeader = e.target.closest('[data-mcp-header-del]');
+        if (delHeader) {
+          collectDraft();
+          state.draft.headers.splice(Number(delHeader.dataset.mcpHeaderDel), 1);
+          paintEditor();
+          return;
+        }
+        if (e.target.closest('[data-mcp-probe]')) {
+          runProbe();
+          return;
+        }
+        if (e.target.closest('[data-mcp-connect]')) {
+          probeAndSave();
+          return;
+        }
+        if (e.target.closest('[data-mcp-save]')) {
+          saveServer();
+          return;
+        }
         if (e.target.closest('[data-mcp-toggle]')) {
-          if (stateInfo(server).label === '已停用') doHandshake(server);
-          else doDisconnect(server);
+          toggleServer();
           return;
         }
-        if (e.target.closest('[data-mcp-delete]')) { doDelete(server); }
+        if (e.target.closest('[data-mcp-delete]')) {
+          deleteServer();
+        }
       });
 
-      backdrop.addEventListener('click', closeDrawer);
-
-      drawer.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && e.target.closest('[data-mcp-args]')) runTest();
+      root.addEventListener('input', function (e) {
+        if (e.target.matches('[data-mcp-search]')) {
+          state.keyword = String(e.target.value || '');
+          paintList();
+          return;
+        }
+        if (e.target.matches('[data-mcp-name]')) state.draft.name = e.target.value;
+        if (e.target.matches('[data-mcp-id]')) state.draft.id = e.target.value;
+        if (e.target.matches('[data-mcp-url]')) state.draft.url = e.target.value;
+        if (e.target.matches('[data-mcp-key-id]')) state.draft.authKeyId = e.target.value;
+        if (e.target.matches('[data-mcp-secret]')) state.draft.authSecret = e.target.value;
       });
 
-      const headerAdd = document.querySelector('.page-header [data-mcp-add]');
-      if (headerAdd) headerAdd.addEventListener('click', function () {
-        openServiceModal(api, null, function () { reload(true); });
+      root.addEventListener('change', function (e) {
+        if (e.target.matches('input[name="mcp-gw-auth"]')) {
+          collectDraft();
+          state.draft.authType = e.target.value;
+          paintEditor();
+        }
       });
 
-      reload(true);
+      load();
     },
   };
 })();

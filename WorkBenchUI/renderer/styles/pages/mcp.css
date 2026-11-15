@@ -815,6 +815,95 @@
   display: none;
 }
 
+/* 自定义请求头 */
+.mcp-header-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.mcp-header-head .field-label {
+  margin-bottom: 0;
+}
+
+.mcp-header-count {
+  display: inline-block;
+  min-width: 17px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(124, 160, 214, 0.13);
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.mcp-header-add {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mcp-header-add:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mcp-headers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.mcp-header-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  gap: 7px;
+  align-items: center;
+}
+
+.mcp-header-row .input {
+  height: 32px;
+  font-size: 11.5px;
+}
+
+.mcp-header-del {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  border-radius: 8px;
+  background: rgba(251, 113, 133, 0.06);
+  color: #fb7185;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mcp-header-del:hover {
+  border-color: rgba(251, 113, 133, 0.55);
+  background: rgba(251, 113, 133, 0.12);
+}
+
+.mcp-header-empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--line-soft);
+  border-radius: 9px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .mcp-advanced {
   border: 1px solid var(--line-soft);
   border-radius: 10px;

@@ -20,7 +20,7 @@ namespace Wizstar.Data.Entities.Business
            /// Desc:
            /// Default:
            /// Nullable:False
-           /// </summary>           
+           /// </summary>
            [SugarColumn(IsPrimaryKey=true,IsIdentity=true,ColumnName="id")]
            public long Id {get;set;}
 
@@ -29,7 +29,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="agent_key")]           
+           [SugarColumn(ColumnName="agent_key")]
            public string AgentKey {get;set;}
 
            /// <summary>
@@ -37,7 +37,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="title")]           
+           [SugarColumn(ColumnName="title")]
            public string Title {get;set;}
 
            /// <summary>
@@ -45,15 +45,22 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(ColumnName="tags")]           
+           [SugarColumn(ColumnName="tags")]
            public string Tags {get;set;}
+
+           /// <summary>
+           /// Desc:是否启用（空=启用，兼容旧数据）
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="enabled", IsNullable=true)]
+           public bool? Enabled {get;set;}
 
            /// <summary>
            /// Desc:
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="content")]           
+           [SugarColumn(ColumnName="content")]
            public string Content {get;set;}
 
            /// <summary>
@@ -61,7 +68,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:CURRENT_TIMESTAMP
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="created_at")]           
+           [SugarColumn(ColumnName="created_at")]
            public DateTime CreatedAt {get;set;}
 
            /// <summary>
@@ -69,7 +76,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:CURRENT_TIMESTAMP
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="updated_at")]           
+           [SugarColumn(ColumnName="updated_at")]
            public DateTime UpdatedAt {get;set;}
 
     }

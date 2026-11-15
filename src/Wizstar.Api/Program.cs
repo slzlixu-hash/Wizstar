@@ -1,13 +1,17 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Wizstar.Agents.Audit;
 using Wizstar.Agents.Governance;
 using Wizstar.Agents.Ledger;
 using Wizstar.Agents.Profiles;
 using Wizstar.Agents.Runtime;
+using Wizstar.Agents.Skills;
 using Wizstar.Agents.Tools;
 using Wizstar.Api.Middleware;
 using Wizstar.Api.Endpoints;
+using Wizstar.Api.Pipelines;
 using Wizstar.Api.Services;
+using Wizstar.Api.Skills;
 using Wizstar.Contracts;
 using Wizstar.Data;
 using Wizstar.Data.Llm;
@@ -80,9 +84,18 @@ builder.Services.AddHttpClient("mcp")
 builder.Services.AddSingleton<AgentCatalog>(sp => new AgentCatalog(
     Path.Combine(builder.Environment.ContentRootPath, "config/agents.yaml"),
     sp.GetRequiredService<ILogger<AgentCatalog>>()));
-builder.Services.AddSingleton<ConversationStore>();
+// Agent 级 MCP 工具切片：管理界面保存的精确勾选，覆盖 agents.yaml 中该服务的默认授权
+builder.Services.AddSingleton(sp => new AgentMcpPolicyStore(
+    Path.Combine(builder.Environment.ContentRootPath, "config/agent-mcp-policies.json"),
+    sp.GetRequiredService<ILogger<AgentMcpPolicyStore>>()));
+// 会话与上下文：会话历史落 MySQL（按 Agent 独立），长期记忆/知识库按字符上限注入
+builder.Services.AddSingleton<IConversationStore, DbConversationStore>();
+builder.Services.AddSingleton<IAgentContextProvider, DbAgentContextProvider>();
+builder.Services.AddSingleton<AgentMemoryService>();
 builder.Services.AddSingleton<ChatClientProvider>();
 builder.Services.AddSingleton<AgentRunner>();
+// 群聊会诊：复用 wiz_agent_session（AgentKey=__group__），参会人/标题落 participants_json/title
+builder.Services.AddSingleton<GroupChatService>();
 
 // ── 工具总线：内置演示工具 + MCP 工具桥接（ToolRegistry 注入全部 IToolProvider）──
 builder.Services.AddSingleton<BuiltinToolsProvider>();
@@ -94,6 +107,8 @@ builder.Services.AddSingleton<ToolInvoker>();
 
 // ── 治理与账本 ──────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IApprovalStore, InMemoryApprovalStore>();
+// 统一审计轨迹：AgentRunner 工具调用 + 流水线动作落 MySQL，供轨迹日志界面查询
+builder.Services.AddSingleton<IAuditTrail, DbAuditTrail>();
 builder.Services.AddSingleton(sp => new OperationLedger(
     builder.Configuration["Ledger:Path"] ?? "data/ledger.db",
     sp.GetRequiredService<ILogger<OperationLedger>>()));
@@ -127,6 +142,32 @@ builder.Services.AddSingleton(_ => new AuthTokenService(
     builder.Configuration.GetValue("Auth:TokenHours", 12)));
 builder.Services.AddSingleton<AuthService>();
 
+// ── 声明式工作流管道（pipelines/*.yaml）──────────────────────────────────────
+// 配方目录默认取仓库根 pipelines/（ContentRoot = src/Wizstar.Api，故为 ../../pipelines），
+// 可用 Pipelines:ConfigPath 覆盖；来源→配方的映射完全由 YAML 的 trigger_source 声明。
+builder.Services.AddSingleton(sp =>
+{
+    var configured = builder.Configuration["Pipelines:ConfigPath"] ?? "../../pipelines";
+    var directory = Path.IsPathRooted(configured)
+        ? configured
+        : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, configured));
+    return new PipelineCatalog(directory, sp.GetRequiredService<ILogger<PipelineCatalog>>());
+});
+builder.Services.AddSingleton<IPipelineProjectStore, SqlPipelineProjectStore>();
+builder.Services.AddSingleton<PipelineStore>();
+builder.Services.AddSingleton<PipelineOrchestrator>();
+
+// ── Skill SOP：skills/*.yaml 声明式目录，保存后热加载并立即影响下一次 Agent 运行 ──
+builder.Services.AddSingleton(sp =>
+{
+    var configured = builder.Configuration["Skills:ConfigPath"] ?? "../../skills";
+    var directory = Path.IsPathRooted(configured)
+        ? configured
+        : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, configured));
+    return new SkillCatalog(directory, sp.GetRequiredService<ILogger<SkillCatalog>>());
+});
+builder.Services.AddSingleton<SkillStore>();
+
 // ── LLM 动态配置：系统设置页写入 → 运行时热切 live/offline ──────────────────────
 // 主密钥留空时由 ApiKeyProtector 派生本机开发值；生产环境用 WIZSTAR_MASTER_KEY 注入。
 builder.Services.AddSingleton(_ => new LlmRuntimeDefaults(
@@ -149,8 +190,14 @@ app.UseMiddleware<AuthMiddleware>();
 
 app.MapAuthEndpoints();
 app.MapAgentEndpoints();
+app.MapAgentMemoryEndpoints();
+app.MapGroupChatEndpoints();
+app.MapCommanderEndpoints();
 app.MapApprovalEndpoints();
 app.MapMcpEndpoints();
+app.MapPipelineEndpoints();
+app.MapSkillEndpoints();
+app.MapAuditEndpoints();
 app.MapOperationsEndpoints();
 app.MapUiEndpoints();
 app.MapLlmEndpoints();

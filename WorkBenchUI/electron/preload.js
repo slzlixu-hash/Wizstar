@@ -26,6 +26,18 @@ contextBridge.exposeInMainWorld('workbench', {
     ipcRenderer.invoke('auth:login', { username, password, remember: !!remember }),
   logout: () => ipcRenderer.invoke('auth:logout'),
   me: () => ipcRenderer.invoke('auth:me'),
+  // 切换用户：回登录窗口（不清除「记住账号密码」）
+  switchUser: () => ipcRenderer.invoke('auth:switch'),
+  // 退出系统：关闭应用
+  quit: () => ipcRenderer.send('app:quit'),
+  // 打开指挥官管理界面（独立窗口）
+  openCommander: () => ipcRenderer.send('win:open-commander'),
+  // 指挥官窗口请求主窗口跳转（hash 路由）
+  navigateMain: (hash) => ipcRenderer.send('main:navigate', hash),
+  onMainNavigate: (callback) => {
+    if (typeof callback !== 'function') return;
+    ipcRenderer.on('main:navigate', (_event, hash) => callback(hash));
+  },
   // 「记住账号和密码」预填 / 清除
   getRemembered: () => ipcRenderer.invoke('auth:remember-get'),
   forgetRemembered: () => ipcRenderer.invoke('auth:remember-clear'),

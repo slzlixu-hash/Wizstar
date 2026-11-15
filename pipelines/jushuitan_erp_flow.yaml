@@ -1,0 +1,48 @@
+# 聚水潭货盘草稿先行流
+#
+# 聚水潭自带成本价、库存与完整 SKU 规格，不需要去 1688 寻源：
+# 审核通过后先推店铺草稿箱占坑（锁定类目/属性映射），再慢慢改图生视频，最后正式上架。
+pipeline_id: jushuitan_erp_flow
+name: 聚水潭货盘草稿先行流
+enabled: true
+trigger_source: jushuitan
+description: 聚水潭货盘同步 → 资格/库存审核 → 推草稿箱 → 改图生视频 → 更新素材并正式上架
+stages:
+  - code: scout_ingest
+    name: 货盘同步落库
+    type: auto
+    agent: selection
+    skill: jushuitan_sync_skill
+    next: qualification_gate
+
+  - code: qualification_gate
+    name: 资格 / 库存审核
+    type: hitl_gate
+    panel: qualification
+    auto_rule: "stock_quantity >= 50"
+    require_human: true
+    next: push_shop_draft
+
+  - code: push_shop_draft
+    name: 推送店铺草稿箱
+    type: auto
+    agent: publisher
+    skill: shop_draft_skill
+    mode: listing_0
+    next: creative_media
+
+  - code: creative_media
+    name: 改主图 / 生视频
+    type: auto
+    agent: creative
+    skill: media_enrich_skill
+    panel: media_compare
+    next: publish_online
+
+  - code: publish_online
+    name: 更新素材并上架
+    type: auto
+    agent: publisher
+    skill: shop_publish_skill
+    mode: update_and_list
+    next: null

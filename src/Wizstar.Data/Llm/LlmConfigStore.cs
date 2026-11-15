@@ -47,11 +47,16 @@ public sealed class LlmConfigStore(
 
     // ---------------------------------------------------------------- 种子
 
-    /// <summary>启动自检：逐项补齐内置供应商 / 模型 / Agent 分派；已有数据一律不动。</summary>
+    /// <summary>
+    /// 启动自检：只在「内置供应商首次创建」时播种默认模型；已有供应商不再补模型，
+    /// 避免用户手动删除 deepseek-chat / deepseek-reasoner 后被重启复活。
+    /// 同时清理指向已删除 / 停用模型的分派，并在缺少默认模型时提升一个可用模型兜底。
+    /// </summary>
     public void EnsureSeed()
     {
         var now = DateTime.Now;
 
+        var createdProviders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var s in Seeds)
         {
             if (FindProvider(s.Code) is not null) continue;
@@ -66,10 +71,13 @@ public sealed class LlmConfigStore(
                 Enabled = true,
                 UpdatedAt = now
             }).ExecuteCommand();
+            createdProviders.Add(s.Code);
         }
 
         foreach (var m in SeedModels)
         {
+            // 供应商已存在 = 不是首次初始化，用户删掉的种子模型不复活
+            if (!createdProviders.Contains(m.Code)) continue;
             if (FindModel(m.Code, m.ModelId) is not null) continue;
             db.Insertable(new LlmModelDefinition
             {
@@ -81,8 +89,22 @@ public sealed class LlmConfigStore(
             }).ExecuteCommand();
         }
 
+        // 清掉指向不存在 / 已停用模型的分派，避免界面显示一个实际不存在的模型
+        foreach (var binding in db.Queryable<LlmAgentBindingRecord>().ToList())
+        {
+            var target = FindModel(binding.ProviderCode, binding.ModelId);
+            if (target is null || !target.Enabled)
+            {
+                db.Deleteable<LlmAgentBindingRecord>()
+                    .Where(x => x.AgentKey == binding.AgentKey)
+                    .ExecuteCommand();
+            }
+        }
+
         foreach (var b in SeedBindings)
         {
+            var target = FindModel(b.Provider, b.Model);
+            if (target is null || !target.Enabled) continue;
             var existing = db.Queryable<LlmAgentBindingRecord>()
                 .Where(x => x.AgentKey == b.Agent).First();
             if (existing is not null) continue;
@@ -93,6 +115,32 @@ public sealed class LlmConfigStore(
                 ProviderCode = b.Provider,
                 UpdatedAtUtc = DateTime.UtcNow
             }).ExecuteCommand();
+        }
+
+        EnsureFallbackDefault();
+    }
+
+    /// <summary>没有任何启用中的全局默认模型时，提升最早的一个启用模型，避免误删默认后整站 offline。</summary>
+    private void EnsureFallbackDefault()
+    {
+        try
+        {
+            if (db.Queryable<LlmModelDefinition>().Where(m => m.IsDefaultGlobal && m.Enabled).Any())
+            {
+                return;
+            }
+            var candidate = db.Queryable<LlmModelDefinition>()
+                .Where(m => m.Enabled)
+                .OrderBy(m => m.Id)
+                .First();
+            if (candidate is null) return;
+            candidate.IsDefaultGlobal = true;
+            db.Updateable(candidate).ExecuteCommand();
+            warn?.Invoke($"默认模型缺失，已自动提升: {candidate.ModelId}");
+        }
+        catch (Exception ex)
+        {
+            warn?.Invoke($"默认模型兜底失败: {ex.Message}");
         }
     }
 
@@ -260,7 +308,29 @@ public sealed class LlmConfigStore(
             return false;
         }
 
+        var wasDefault = model.IsDefaultGlobal;
         db.Deleteable<LlmModelDefinition>().Where(m => m.Id == model.Id).ExecuteCommand();
+        // 分派不能指向已删除模型：删除后该 Agent 自动回落全局默认模型
+        db.Deleteable<LlmAgentBindingRecord>()
+            .Where(b => b.ProviderCode == code && b.ModelId == modelId)
+            .ExecuteCommand();
+
+        if (wasDefault)
+        {
+            var replacement = db.Queryable<LlmModelDefinition>()
+                    .Where(m => m.ProviderCode == code && m.Enabled)
+                    .OrderBy(m => m.Id)
+                    .First()
+                ?? db.Queryable<LlmModelDefinition>()
+                    .Where(m => m.Enabled)
+                    .OrderBy(m => m.Id)
+                    .First();
+            if (replacement is not null)
+            {
+                replacement.IsDefaultGlobal = true;
+                db.Updateable(replacement).ExecuteCommand();
+            }
+        }
         return true;
     }
 
@@ -320,45 +390,71 @@ public sealed class LlmConfigStore(
 
     // ---------------------------------------------------------------- 运行时热配置
 
-    public LlmRuntimeSettings? GetCurrent()
+    public LlmRuntimeSettings? GetCurrent() => ResolveRuntime(null);
+
+    /// <summary>按 Agent 绑定解析模型；绑定缺失/停用时回落到全局默认模型。</summary>
+    public LlmRuntimeSettings? GetForAgent(string agentKey) => ResolveRuntime(agentKey);
+
+    private LlmRuntimeSettings? ResolveRuntime(string? agentKey)
     {
         try
         {
-            var model = db.Queryable<LlmModelDefinition>()
+            if (!string.IsNullOrWhiteSpace(agentKey))
+            {
+                var binding = db.Queryable<LlmAgentBindingRecord>()
+                    .Where(b => b.AgentKey == agentKey).First();
+                if (binding is not null && !string.IsNullOrWhiteSpace(binding.ModelId))
+                {
+                    var bound = db.Queryable<LlmModelDefinition>()
+                        .Where(m => m.ProviderCode == binding.ProviderCode
+                            && m.ModelId == binding.ModelId && m.Enabled).First();
+                    if (bound is not null)
+                    {
+                        var boundSettings = BuildForModel(bound);
+                        if (boundSettings is not null)
+                        {
+                            return boundSettings;
+                        }
+                    }
+                    // 绑定模型/供应商失效：回落全局默认，避免该 Agent 直接被判离线
+                }
+            }
+
+            var fallback = db.Queryable<LlmModelDefinition>()
                 .Where(m => m.IsDefaultGlobal && m.Enabled).First();
-            if (model is null)
-            {
-                return null;
-            }
-
-            var provider = db.Queryable<LlmProvider>()
-                .Where(p => p.ProviderCode == model.ProviderCode && p.Enabled).First();
-            if (provider is null || string.IsNullOrWhiteSpace(provider.BaseUrl))
-            {
-                return null;
-            }
-
-            var apiKey = ApiKeyProtector.Unprotect(provider.ApiKeyCipher, masterKey);
-            // 公网供应商未配置 Key 时判为 offline（不伪造在线）；自建本地网关允许免密。
-            if (string.IsNullOrWhiteSpace(apiKey) && !IsLoopback(provider.BaseUrl))
-            {
-                return null;
-            }
-
-            return new LlmRuntimeSettings(
-                provider.ProviderCode,
-                provider.BaseUrl.Trim().TrimEnd('/'),
-                model.ModelId,
-                string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                defaults.Temperature,
-                defaults.MaxOutputTokens,
-                defaults.TimeoutSeconds);
+            return fallback is null ? null : BuildForModel(fallback);
         }
         catch (Exception ex)
         {
             warn?.Invoke($"动态 LLM 配置读取失败，回退离线: {ex.Message}");
             return null;
         }
+    }
+
+    private LlmRuntimeSettings? BuildForModel(LlmModelDefinition model)
+    {
+        var provider = db.Queryable<LlmProvider>()
+            .Where(p => p.ProviderCode == model.ProviderCode && p.Enabled).First();
+        if (provider is null || string.IsNullOrWhiteSpace(provider.BaseUrl))
+        {
+            return null;
+        }
+
+        var apiKey = ApiKeyProtector.Unprotect(provider.ApiKeyCipher, masterKey);
+        // 公网供应商未配置 Key 时判为 offline（不伪造在线）；自建本地网关允许免密。
+        if (string.IsNullOrWhiteSpace(apiKey) && !IsLoopback(provider.BaseUrl))
+        {
+            return null;
+        }
+
+        return new LlmRuntimeSettings(
+            provider.ProviderCode,
+            provider.BaseUrl.Trim().TrimEnd('/'),
+            model.ModelId,
+            string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+            defaults.Temperature,
+            defaults.MaxOutputTokens,
+            defaults.TimeoutSeconds);
     }
 
     /// <summary>逐项定位「为什么还不能上真实模型」，供 health / bootstrap / 设置页显示。</summary>

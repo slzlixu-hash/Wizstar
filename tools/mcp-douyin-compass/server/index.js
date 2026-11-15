@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * mcp-douyin-compass —— 抖店电商罗盘选品 MCP 服务（零依赖，规范 V1.0）
+ * mcp-douyin-compass —— 电商罗盘选品 MCP 服务（零依赖，规范 V1.0）
  *
  * 端点：
  *   GET  /healthz  探活（无副作用、免签，与 McpJsonRpcClient.HealthProbeAsync 对齐）

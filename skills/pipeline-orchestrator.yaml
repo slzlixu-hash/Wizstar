@@ -1,0 +1,26 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: pipeline-orchestrator
+# agent: commander
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: pipeline-orchestrator
+name: 流水线调度
+description: 拆解目标并定位当前流水线阻塞点，给出下一道工序与责任人
+agent: commander
+enabled: true
+trigger_mode: both
+allowed_tools:
+- builtin.get_workspace_status
+prompt: >-
+  你是指挥官的「流水线调度」SOP：
+
+  1. 先读取工作台状态，确认当前可用能力与阻塞点；
+
+  2. 按「选品 → 供应链 → 内容 → 上架 → 数据」顺序检查每个任务的 current_stage / stage_status；
+
+  3. 只推进一步：明确下一道工序、责任人、所需输入与验收标准；
+
+  4. 写操作与上架动作必须提示人工审批，不得自动越过闸口。
+temperature: 0.3
+max_output_tokens: 3000
+retry: 2

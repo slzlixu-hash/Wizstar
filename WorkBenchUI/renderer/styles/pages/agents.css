@@ -527,3 +527,818 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ==========================================================================
+   Agent 工作台（右滑浮层）
+   ========================================================================== */
+.avatar__fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar__fallback[hidden] {
+  display: none;
+}
+
+.aw-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(3, 7, 15, 0.62);
+  backdrop-filter: blur(2px);
+  animation: wb-fade-in 0.2s ease both;
+}
+
+.aw-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: 94vw;
+  border-left: 1px solid var(--card-border);
+  background: linear-gradient(180deg, #0c1526 0%, #080e1b 100%);
+  box-shadow: -34px 0 72px -40px rgba(0, 0, 0, 0.95);
+  overflow: hidden;
+  animation: wb-slide-in-right 0.28s var(--ease) both;
+}
+
+.aw-drawer:focus {
+  outline: none;
+}
+
+.aw-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.aw-avatar .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+.aw-head-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aw-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: #f2f7ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aw-en {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.aw-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aw-head-status {
+  flex: none;
+}
+
+/* 工作台模型选择：标题栏右上角下拉 */
+.aw-model {
+  position: relative;
+  flex: none;
+}
+
+.aw-model-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 178px;
+  padding: 5px 8px;
+  border: 1px solid rgba(124, 160, 214, 0.3);
+  border-radius: 8px;
+  background: rgba(124, 160, 214, 0.06);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.aw-model-btn:hover {
+  border-color: rgba(34, 211, 238, 0.45);
+  color: #a5f3fc;
+}
+
+.aw-model-name {
+  max-width: 86px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.aw-model-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 90;
+  width: 284px;
+  max-height: 330px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid rgba(124, 160, 214, 0.32);
+  border-radius: 12px;
+  background: rgba(16, 26, 44, 0.97);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 20px 44px -18px rgba(0, 0, 0, 0.95);
+  animation: wb-fade-up 0.16s var(--ease) both;
+}
+
+.aw-model-menu[hidden] {
+  display: none;
+}
+
+.aw-model-menu-head {
+  padding: 5px 8px 7px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.aw-model-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.aw-model-item:hover {
+  background: rgba(124, 160, 214, 0.1);
+}
+
+.aw-model-item.is-on {
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.aw-model-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.aw-model-item-main b {
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-model-item-main em {
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+
+.aw-model-item-provider {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  font-size: 9px;
+  color: var(--text-3);
+}
+
+.aw-model-empty {
+  padding: 10px 9px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
+.aw-tabs {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.aw-tab {
+  padding: 8px 12px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.aw-tab:hover {
+  color: var(--text-1);
+}
+
+.aw-tab.is-on {
+  color: #a5f3fc;
+  border-bottom-color: rgba(34, 211, 238, 0.8);
+}
+
+.aw-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 20px 18px;
+  overflow: hidden;
+}
+
+.aw-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.aw-panel--chat {
+  overflow: hidden;
+}
+
+/* 聊天 */
+.aw-chat-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.aw-chat-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 4px;
+}
+
+.aw-chat-hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.aw-quick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aw-quick {
+  padding: 6px 10px;
+  border: 1px dashed rgba(124, 160, 214, 0.26);
+  border-radius: 8px;
+  background: rgba(124, 160, 214, 0.05);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.aw-quick:hover {
+  border-color: rgba(34, 211, 238, 0.5);
+  color: #a5f3fc;
+}
+
+.aw-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 88%;
+}
+
+.aw-msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.aw-msg--agent {
+  align-self: flex-start;
+}
+
+.aw-bubble {
+  padding: 9px 12px;
+  border-radius: 11px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.aw-msg--user .aw-bubble {
+  background: rgba(34, 211, 238, 0.14);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  color: #dff6ff;
+}
+
+.aw-msg--agent .aw-bubble {
+  background: rgba(124, 160, 214, 0.08);
+  border: 1px solid var(--line-soft);
+  color: var(--text-1);
+}
+
+.aw-msg-meta {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.aw-chat-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-top: 10px;
+}
+
+.aw-chat-input .input {
+  flex: 1 1 auto;
+}
+
+.aw-hint {
+  flex: none;
+  margin-top: 8px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.aw-alert {
+  padding: 9px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.32);
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.08);
+  color: #fcd34d;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+/* 记忆 / 上下文 */
+.aw-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.aw-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-section-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.aw-count {
+  min-width: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(124, 160, 214, 0.13);
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 17px;
+  text-align: center;
+}
+
+.aw-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.aw-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(124, 160, 214, 0.04);
+}
+
+.aw-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aw-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.aw-row-metric {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.aw-row-text {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  word-break: break-word;
+}
+
+.aw-row-meta {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.aw-icon-del {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.aw-icon-del:hover {
+  border-color: rgba(251, 113, 133, 0.4);
+  color: #fb7185;
+}
+
+.aw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.03);
+}
+
+.aw-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.aw-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.aw-textarea {
+  width: 100%;
+  resize: vertical;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.aw-kv {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 7px 10px;
+  font-size: 11.5px;
+}
+
+.aw-kv span {
+  color: var(--text-3);
+}
+
+.aw-kv b {
+  color: var(--text-2);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.aw-prompt {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(5, 9, 15, 0.65);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.aw-empty {
+  padding: 14px 4px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.aw-empty .spinner {
+  margin-right: 6px;
+}
+
+@media (max-width: 1320px) {
+  .aw-drawer {
+    width: 520px;
+  }
+}
+
+/* ------------------------------ Skill 技能（本 Agent） ------------------------------ */
+.aw-skill-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.aw-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aw-skill-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(124, 160, 214, 0.035);
+}
+
+.aw-skill-card-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.aw-skill-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.aw-skill-card-head b {
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+
+.aw-skill-code {
+  font-size: 9.5px;
+  color: #a5f3fc;
+}
+
+.aw-skill-meta {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.aw-skill-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.aw-skill-act {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.aw-skill-act:hover {
+  border-color: rgba(34, 211, 238, 0.45);
+  color: #a5f3fc;
+}
+
+.aw-skill-act.is-danger:hover {
+  border-color: rgba(251, 113, 133, 0.4);
+  color: #fb7185;
+}
+
+.aw-skill-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aw-skill-grid2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 9px;
+}
+
+.aw-skill-grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.aw-skill-enabled-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.aw-skill-enabled-line input[type="checkbox"] {
+  accent-color: #22d3ee;
+}
+
+.aw-skill-enabled-line em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.aw-skill-enabled-line .input {
+  width: 64px;
+  height: 28px;
+}
+
+.aw-skill-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(6, 11, 19, 0.5);
+}
+
+.aw-skill-tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 7px;
+  border: 1px solid rgba(124, 160, 214, 0.14);
+  border-radius: 7px;
+  background: rgba(124, 160, 214, 0.025);
+}
+
+.aw-skill-tool-group.is-missing {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.aw-skill-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+
+.aw-skill-tool-head .mono {
+  color: #a5f3fc;
+  font-size: 10px;
+}
+
+.aw-skill-group-toggle {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.aw-skill-group-count {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-3);
+}
+
+.aw-skill-group-all {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.aw-skill-group-all input {
+  width: 12px;
+  height: 12px;
+  accent-color: #22d3ee;
+}
+
+.aw-skill-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aw-skill-tool-body[hidden] {
+  display: none;
+}
+
+.aw-skill-tool {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 2px;
+  cursor: pointer;
+}
+
+.aw-skill-tool input {
+  margin-top: 2px;
+  accent-color: #22d3ee;
+}
+
+.aw-skill-tool span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.aw-skill-tool code {
+  font-size: 10px;
+  color: var(--text-1);
+}
+
+.aw-skill-tool em {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-skill-prompt {
+  min-height: 140px;
+  resize: vertical;
+  font-family: var(--font-mono, Consolas, monospace);
+  font-size: 11px;
+  line-height: 1.65;
+}

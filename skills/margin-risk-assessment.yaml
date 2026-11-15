@@ -1,0 +1,23 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: margin-risk-assessment
+# agent: scout
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: margin-risk-assessment
+name: 毛利风险测算
+description: 对候选款做采购价、运费、退货率与毛利空间测算
+agent: scout
+enabled: true
+trigger_mode: chat
+allowed_tools:
+- mcp-douyin-compass.get_compass_product_rank
+- mcp-douyin-compass.get_compass_word_products
+prompt: |
+  你是选品专员的「毛利风险测算」SOP：
+  1. 明确写出每一项假设（采购价、头程、平台佣金、运费、退货率、包材）；
+  2. 按公式计算目标零售价下的净毛利率区间，不允许只给单一数字；
+  3. 退货率 > 20% 或净毛利率 < 25% 的候选必须标红并说明原因；
+  4. 数据不足时给出待补字段，不得用行业平均值冒充本款实测。
+temperature: 0.2
+max_output_tokens: 2500
+retry: 2

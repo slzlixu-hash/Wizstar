@@ -22,6 +22,12 @@ public interface ILlmRuntimeSettingsProvider
     LlmRuntimeSettings? GetCurrent();
 
     /// <summary>
+    /// 按 Agent 解析生效模型：优先该 Agent 的绑定（wiz_llm_agent_binding），
+    /// 未绑定 / 绑定失效时回落全局默认模型。默认实现直接返回全局配置。
+    /// </summary>
+    LlmRuntimeSettings? GetForAgent(string agentKey) => GetCurrent();
+
+    /// <summary>
     /// GetCurrent() 返回 null 时给出可读的离线原因（默认模型 / 供应商 / API Key 哪一项缺失）。
     /// 默认实现返回 null，宿主再回退到静态配置的原因文案；实现不得抛异常。
     /// </summary>

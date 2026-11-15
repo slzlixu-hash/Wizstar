@@ -110,7 +110,10 @@ public sealed class AgentCatalog(string filePath, ILogger<AgentCatalog> logger)
                 entry.SystemPrompt,
                 entry.AllowedTools ?? [],
                 Math.Clamp(entry.MaxSteps, 1, 32),
-                entry.Enabled));
+                entry.Enabled,
+                entry.Avatar ?? key,
+                string.IsNullOrWhiteSpace(entry.Tone) ? "cyan" : entry.Tone.Trim().ToLowerInvariant(),
+                entry.QuickPrompts ?? []));
         }
 
         return profiles;

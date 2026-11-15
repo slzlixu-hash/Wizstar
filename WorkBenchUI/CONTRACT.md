@@ -137,12 +137,118 @@ ui.bind(root, selector, event, handler)            // 批量绑定
 
 ### agents —— `ref-04-agents.webp`
 
-- 名册来自 `GET /api/agents`；统计条来自 `GET /api/agents/stats`（真实账本口径，文案写「账本操作」）。
-- 筛选三态：全部 / 仅启用 / 仅停用（本地过滤真实字段，不做假分类）。
-- 「查看配置」走 `GET /api/agents/{key}`，弹窗展示完整 `systemPrompt`（只读）。
-- 「进入工作台」走 `POST /api/agents/{key}/chat`，对话弹框；模型离线时如实提示原因。
-- 通配授权显示「全部（通配 *）」，不再显示成「1 条」。
-- 不再有「+ 新建 Agent」（后端无写端点）。
+- 名册来自 `GET /api/agents`（bootstrap 同步下发头像 `avatar` / 色调 `tone` / 快捷指令 `quickPrompts`）；
+  统计条来自 `GET /api/agents/stats`（真实账本口径，文案写「账本操作」）。
+- 6 位 Agent：指挥官 commander / 选品专家 scout / 供应链专家 sourcing / 内容创作 creative /
+  上架专家 publisher / 数据分析师 analyst；人设与工具授权在 `config/agents.yaml`，头像取 `ico/<avatar>.ico`（加载失败回落首字）。
+- 筛选三态：全部 / 仅启用 / 仅停用（本地过滤真实字段）。
+- 按钮统一叫「管理界面」：**指挥官**打开独立窗口 `renderer/commander.html`（铺满整个界面，不套主壳侧边栏/页头；
+  打开时主窗口隐藏、关闭后恢复），其余 Agent 打开右侧工作台浮层。
+  指挥官窗口：顶部身份条（**模型选择** + 窗口控制）+ 左功能轨（工作台/Chat/工作流/记忆体/Skill/MCP/轨迹）+
+  中栏任务台（按工作流新建任务、详情/审核/推进/终止、最近轨迹）+ 右栏「协同与指令台」（真实 Handoff 日志 + `//` 指令）。
+  右上角「模型选择」为下拉框：列出系统已接入且启用的模型，选中即写 `PUT /api/llm/bindings`
+  （`{bindings:{commander:modelId}}`），当前 Agent 后续对话立即使用该模型；顶栏当前模型与 Chat 徽标同步刷新。
+  点「详情」或双击任务行 → **任务详情页**（同一窗口中切换）：返回条 + 任务摘要（进度 i/N 工序）+
+  工序时间线（当前工序展开审核/完成口径、备注与 推进/手动完成/通过/驳回/终止）+ 最近轨迹 + 导出轨迹(JSON)；
+  左轨附带「进行中任务切换」卡，可一键跳到其它在跑任务。
+- **Chat**（左轨进入）：左侧会话列表（新建/切换，历史来自 `wiz_agent_session`）+ 右侧聊天流；
+  每个会话行右侧常驻 **归档 / 删除** 两个操作按钮：
+  - **归档**：`POST /api/agents/{key}/sessions/{id}/archive`（`archived:true|false`），只从默认列表隐藏，
+    历史仍可读；底部「归档箱 N」展开已归档行，可恢复或删除；归档会话只读（输入框/发送/附件禁用）。
+  - **删除**：`DELETE /api/agents/{key}/sessions/{id}`，需二次确认；群聊删除会连带清理
+    `{groupId}:{agentKey}` 内部通道，专员长期记忆不受影响。
+  输入框左下角 `+` 默认收起（不占纵向高度），点击后在按钮上方浮出毛玻璃菜单：
+  「拉起 Agent 群聊（多专员协同会诊）」「上传附件（Excel/CSV/PDF）」「上传商品图/视频」；
+  已挂载文件以胶囊卡片排在输入框上方（带 × 移除），点「发送 ↵」随指令一起发给指挥官。
+  附件文本（CSV/TXT/MD/JSON ≤4000 字）随消息注入模型，二进制只带元信息。
+- **群聊协同会诊**：点 `+` →「拉起 Agent 群聊」后，已有内容的单聊原地升级为群会话（同一 conversationId，
+  历史映射为 user/commander），左栏标为 `#N [群聊·N人] 主题`；无内容时新建 `grp-*` 群会话。
+  群聊复用 `wiz_agent_session`（`AgentKey=__group__`，新增 `title` / `participants_json` 两列，不新增表）：
+  - 顶部 **Participants Bar**：指挥官固定主持，其余专员胶囊可点击切换本轮是否发言；`+ 邀请 / 移除专员`
+    打开增减参会人弹框（上限 6 人，写回 `participants_json`）。
+  - 输入框上方常驻 `@全体 / @Scout / @Sourcing / @Creative / @Publisher…` 快捷胶囊；发送时只把指令发给
+    被 @ 的专员，每位专员**各发言 1 次**即停（不发散接力）；专员使用自己的 conversationId
+    `{groupId}:{agentKey}`，记忆/知识/工具授权严格隔离。
+  - 专员发言后指挥官**固定收敛 1 次**，输出带 `[✅ 采纳群聊决议并推进工序 ➔]` 的总结卡；点击选择任务后，
+    待人工闸口走 `approve`（决议作为备注），否则推进下一道工序。
+  - 端点：`GET/POST /api/agents/groups`、`GET /api/agents/groups/{id}`、
+    `PUT /api/agents/groups/{id}/participants`、`POST /api/agents/groups/{id}/turn`；指挥官会话列表合并群会话
+    （`kind=group` + `title` + `participants`），群聊内部专员通道（含 `:` 的会话 ID）不进单聊列表。
+- **工作流管理**（左轨进入）：左 32% 配方列表（搜索 / 触发来源筛选 / 启用状态）+ 右 68% 纵向积木编排
+  （拖拽排序、闸口「需人工确认」开关、插入/配置节点弹窗、预览 YAML、导入/导出 YAML、保存、删除）；
+  保存直接写 `pipelines/*.yaml` 并热加载。该分区隐藏右侧指令台，画布占满。
+- 「管理界面」（其余 Agent）为右侧浮层，标题栏右上角同样是 **模型选择** 下拉框（按 `agentId` 写绑定，
+  下一条消息即生效，回复 meta 显示实际 `model`）；四个分区全部走真实接口：
+  - **对话**：`POST /api/agents/{key}/chat` + `GET /conversations/{id}`；会话 ID 按 Agent 存 localStorage，
+    后端持久化到 `wiz_agent_session`，刷新可恢复；不同 Agent 同一会话 ID 也互不可见。
+  - **记忆**：`GET/POST/DELETE /api/agents/{key}/memory`、`/knowledge`（长期记忆软删、知识库物理删）。
+  - **上下文**：`GET/PUT /api/agents/{key}/context`（记忆/知识字符上限、L1 开关、最近一次注入快照）。
+  - **配置**：`GET /api/agents/{key}` 展示完整 systemPrompt（只读）。
+- 每次运行把「记忆 + 知识库」拼成独立 system 消息注入（超上限截断并在提示里标注），并写 `agent_context_snapshot`。
+  记忆先按**任务标签**过滤：无标签 / 仅 #全局 的规则始终注入；`#保温杯` 等规则只在请求带对应 `tags` 时注入
+  （聊天未显式传 tags 时，按消息里出现的规则标签做轻量推断）；`sync_agent_keys` 中的 Agent 也能命中同一条规则
+  （跨专员分发）。真正被装配的规则累加 `hit_count`。
+- **记忆体**（指挥官左轨）是自学习中枢（全宽布局，隐藏右侧指令台）：
+  - 顶部三 Tab：`本Agent规则记忆` / `团队共享记忆` / `本地知识库 SOP`；带搜索、适用标签、状态筛选。
+  - 表格列：主题 + 适用标签、规则事实、来源 / 同步对象、命中次数 / 样本量 / 有效期、状态、操作。
+  - **团队共享记忆**：只看 `sync_agent_keys` 非空的生效规则；列升级为
+    `共享维度/标签 | 全局规则事实 | 生效 Agent 范围 | 贡献来源 | 命中次数 | 操作`。
+    全员共享行绿色高亮；筛选支持搜索 / 共享范围（全部、全员、指定） / 分类（主题 `·` 前的维度）。
+    工具栏 `一键广播同步至全员` 把当前 Agent 全部生效规则同步给其余 Agent；每行支持
+    `编辑` / `作用范围`（改同步对象）/ `下线`（清空同步范围，本地规则保留）。
+    右侧「团队共享注入总览」按 Agent 展示覆盖率、共享条数与命中次数。
+  - **本地知识库 SOP**：文档列表（关键词精准检索，不接向量库）+ 右侧详情编辑。
+    列表显示标题、触发标签、主标签、字符数、启用/停用；支持搜索 / 标签 / 状态筛选。
+    工具栏 `导入文档 (.md/.txt)`（读入后进入编辑确认）与 `+ 新建知识条目`；
+    右侧可编辑标题、标签 chips、正文（黑框编辑器）并实时显示 `字符 / maxKnowledgeChars`，
+    底部 `保存修改` / `删除条目`；停用文档不注入 System Prompt。
+    端点：`POST /knowledge`、`PUT /knowledge/{id}`（含 enabled）、`DELETE /knowledge/{id}`。
+  - **手动新增 / 编辑记忆规则弹框**：作用范围三选一（仅当前 Agent / 指定同步 / 全员共享），
+    Agent 彩色胶囊多选；主题 + Target Metric；触发标签 chips（回车添加，添加具体标签时自动去掉 `#全局`）；
+    规则正文 500 字计数；有效期（90天/永久/保持）与置信度；`人工录入直接确认并归档同维度冲突旧规则`
+    开关。支持编辑已有规则（`PUT /memory/{id}`）。
+  - `✨ 提炼近期经验 (自学习)`：扫描近 7 天人工驳回（`wiz_approval` 状态 2）、微信小店审核驳回
+    （`sku_channel_listing.audit_reject_reason`）、高退货率商品（`ecom_order` + `ecom_order_item`），
+    产出 0~5 条 `pending` 候选；同一 `source_ref` 不重复提示，无证据不编造。
+  - 冲突：同主题已有生效规则时，候选行标黄并提示「确认后将自动归档旧规则 #NNN」；确认时
+    `replace=true` 先把旧规则置为 `archived`，避免矛盾规则同时注入。
+  - 跨 Agent：确认弹框可勾选 `Scout / Sourcing / Creative / Publisher / Analyst`，写入 `sync_agent_keys`。
+  - 手动新增同主题规则时，旧生效规则也会自动归档，保证同一主题只有一条注入规则。
+  - 指标：候选显示 `样本 N 项 · 90天有效`，生效规则显示 `已命中 N 次 · 永久/剩余天数`。
+  - 右侧白盒预览：`类目 / 渠道` 模拟器切换即调用 `GET /memory/preview?tags=…`，实时显示
+    `System Prompt Layer 3` 命中的规则、字符预算百分比与 L1 提取开关。
+  - 端点：`POST /memory/learn`、`POST /memory/{id}/confirm|reject|archive`、`PUT /memory/{id}`、
+    `GET /memory/preview`、`GET /memory/scopes`、`GET /memory/team`、`GET /memory/team/overview`、
+    `POST /memory/team/broadcast`、`PUT /memory/team/{id}`、`POST /memory/team/{id}/unshare`。
+- **Skill 技能**（左轨进入，全宽 32% 列表 + 68% 装配台；**每个 Agent 只显示与维护自己的 Skill**）：
+  - 左侧资产列表：搜索名称/标识；卡片显示 code、负责 Agent、工具数、触发模式、启停状态；
+    指挥官页只显示 `agent=commander` 的技能，专员工作台「技能」Tab 只显示该专员的技能。
+  - 右侧双模编辑器：
+    - **可视化装配**：技能名称/唯一标识（创建后不可改）/执行 Agent（固定当前 Agent，只读）/描述/启用开关；
+      精准勾选工具（`serverId.tool`，按 MCP 服务做一级分组、工具为二级列表）；
+      一级分组头提供 **全选 checkbox（支持半选态）** 与 **收起/展开开关**，未连接工具单独告警；
+      Chat/Auto 触发模式（两者可同时勾选，保存为 `trigger_mode: both`）；SOP Prompt；温度/最大 Token/重试参数。
+    - **YAML 源码**：语法高亮 + 可编辑 textarea（透明覆盖层），与可视化双向转换；
+      保存走 `POST /api/skills/import`，按 YAML 落盘。指挥官窗口提供完整双模；专员工作台提供同名可视化维护。
+  - 底部 `保存并热重载`、`停用/启用`、`删除技能`。
+  - 文件：`skills/<code>.yaml`；字段 `code/name/description/agent/enabled/trigger_mode/allowed_tools/prompt/
+    temperature/max_output_tokens/retry`。保存/删除/启停后 `SkillCatalog.ReloadNow()`，无需重启。
+  - 运行时：`POST /api/agents/{key}/chat` 可带 `skillKey`；校验技能启用且绑定当前 Agent，
+    工具取「Agent 授权 ∩ skill.allowed_tools」，SOP Prompt 拼进 System Prompt，温度/Token/重试参数生效。
+  - 端点：`GET /api/skills?agent=`（按 Agent 过滤）、`POST /api/skills`、`GET/PUT/DELETE /api/skills/{code}`、
+    `GET /api/skills/{code}/yaml`、`POST /api/skills/{code}/toggle`、`GET /api/skills/tools`、
+    `POST /api/skills/preview|parse|import`。
+- **轨迹日志**（左轨进入，全宽 `Live Audit Log`）：
+  - 过滤器：今日（24h）/ 近 7 天 / 全部；工作流；日志级别（Success / Warn / Error）；负责 Agent；关键词。
+  - 表格列：时间、来源 / Agent、行为 (Action)、参数 / 负载 (Payload)、状态、操作。
+  - 状态：`Success / Replay / Pending / Approved / Rejected / Error / Blocked`，带颜色与耗时。
+  - 操作：查看（参数/结果 JSON 详情）、只读 MCP 工具失败可重试、待审批可去审批 / 撤回。
+  - 数据源：`wiz_audit_log`；`AgentRunner` 每次工具调用（含回放、HITL 挂起、错误、步数熔断）落审计；
+    流水线推进/审批/完成/终止也写入（source=`pipeline`，带 pipeline_id / project_no）。
+  - 审批结果同步更新轨迹状态（approved / rejected）；批准后仍需下一次同参调用才真正执行。
+  - 导出 CSV（含 BOM，Excel 可直接打开）。
+  - 端点：`GET /api/audit/logs?sinceHours=&pipelineId=&severity=&agent=&keyword=&limit=`。
+- 通配授权显示「全部（通配 *）」；不再有「+ 新建 Agent」（后端无写端点）。
 
 ### mcp —— `ref-05-mcp.webp`
 
@@ -160,6 +266,9 @@ ui.bind(root, selector, event, handler)            // 批量绑定
     底部「编辑供应商」（API Key 录入合并进此弹框，留空=不修改）+「模型管理」+ 非内置卡「删除供应商」。
   - **本机私有化部署不在支持范围**，无本地供应商卡、无免密探测。
   - 全局「Agent 默认模型映射分派表」已移除（由各 Agent 自有界面承载）。
+  - 内置 DeepSeek 供应商与种子模型只在数据库**首次初始化**时写入；用户删除 `deepseek-chat` /
+    `deepseek-reasoner` 后重启不会复活。删除模型会同步清理指向它的 Agent 绑定；若删的是全局默认模型，
+    自动提升同供应商最早启用模型，避免整站 offline。
 - 风控 Tab：三级（read / write / irreversible）开关走 `PUT /api/settings/risk/{id}`；
   `irreversible` 卡 `locked`，开关 disabled + 文案「强制人工审批」，后端写入返回 `43002`。
   底部说明「服务端不自动批准 HITL」。

@@ -1,0 +1,27 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: price-negotiation-sop
+# agent: sourcing
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: price-negotiation-sop
+name: 寻源议价
+description: 1688 以图搜同款、多供应商比价与阶梯价谈判
+agent: sourcing
+enabled: true
+trigger_mode: chat
+allowed_tools:
+- mcp-1688.search_by_image
+- mcp-1688.search_products
+- mcp-1688.get_offer
+- mcp-1688.compare_suppliers
+- mcp-1688.filter_suppliers
+prompt: |
+  你是供应链专员的「寻源议价」SOP：
+  1. 收到选品图片/标题后，先以图搜同款，再用关键词补搜相似款；
+  2. 对比至少 3 家供应商的采购价、起订量、评分、发货地、代发能力；
+  3. 先算物流成本与退货损失，再决定议价目标；阶梯价必须写清对应数量；
+  4. 所有价格来自工具返回，禁止凭印象报价；下单必须提示人工审批。
+  输出：推荐货源 1-3 家 → 对比表 → 目标采购价与毛利 → 下一步。
+temperature: 0.3
+max_output_tokens: 3000
+retry: 2

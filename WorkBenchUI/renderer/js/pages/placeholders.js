@@ -16,6 +16,16 @@
   const ui = WB.ui;
   const pages = (WB.pages = WB.pages || {});
 
+  /** 工序状态 → 徽标配色（与后端 PipelineStageStatus 对齐）。 */
+  const STAGE_STATUS_META = {
+    pending: { tone: 'slate', label: '待执行' },
+    running: { tone: 'cyan', label: '执行中' },
+    waiting_human: { tone: 'amber', label: '待人工审核' },
+    completed: { tone: 'green', label: '已完成' },
+    failed: { tone: 'rose', label: '失败' },
+    blocked: { tone: 'slate', label: '待接线' },
+  };
+
   function statRow(stats) {
     const list = Array.isArray(stats) ? stats : [];
     if (!list.length) return '';
@@ -154,6 +164,18 @@
             ctx.toast('已从业务表重新加载', 'success');
           });
         }
+
+        /* 商品行点击 → 右滑工作流抽屉（时间线 / 闸口审核 / 推进） */
+        if (cfg.pipeline) {
+          tableHost.addEventListener('click', (e) => {
+            if (e.target.closest('button, a, input, select, textarea')) return;
+            const tr = e.target.closest('tr[data-project]');
+            if (!tr) return;
+            if (WB.pipelineDrawer && typeof WB.pipelineDrawer.open === 'function') {
+              WB.pipelineDrawer.open(tr.dataset.project);
+            }
+          });
+        }
       },
     };
   }
@@ -163,6 +185,7 @@
     key: 'products',
     endpoint: 'products',
     fileName: 'products',
+    pipeline: true,
     title: '商品管理',
     subtitle: '全渠道商品库 · 数据来自 sku_project / sku_variant / sku_channel_listing',
     searchPlaceholder: '搜索商品名称或 SKU',
@@ -170,6 +193,7 @@
       { id: 'all', label: '全部', test: () => true },
       { id: 'on', label: '在售', test: (r) => r.rawStatus === 'published' },
       { id: 'audit', label: '待审核', test: (r) => r.rawStatus === 'pending_review' },
+      { id: 'gate', label: '待人工审核', test: (r) => r.stageStatus === 'waiting_human' },
       { id: 'warn', label: '缺货预警', test: (r) => Number(r.stock) <= 0 },
     ],
     csvColumns: [
@@ -178,6 +202,7 @@
       { label: '售价', value: (r) => r.price },
       { label: '库存', value: (r) => r.stock },
       { label: '主渠道', value: (r) => r.channel },
+      { label: '流程进度', value: (r) => (r.currentStage ? `${r.stageIndex}/${r.stageTotal} ${r.currentStageName || ''}` : '') },
       { label: '状态', value: (r) => r.status },
       { label: '毛利率', value: (r) => r.marginRate },
     ],
@@ -202,8 +227,23 @@
               )}</span>`,
           },
           { label: '主渠道', width: '130px', render: (r) => ui.chip(r.channel, { icon: 'shop' }) },
+          {
+            label: '流程进度',
+            width: '168px',
+            render: (r) => {
+              if (!r.currentStage) {
+                return ui.badge('未匹配配方', { tone: 'slate' });
+              }
+              const meta = STAGE_STATUS_META[r.stageStatus] || STAGE_STATUS_META.pending;
+              const text = `${r.stageIndex}/${r.stageTotal} ${r.currentStageName || r.currentStage}`;
+              return `<span class="ph-stage" title="${ui.esc(
+                [r.pipelineName, r.stageNote].filter(Boolean).join(' · ')
+              )}">${ui.badge(text, { tone: meta.tone, dot: true })}</span>`;
+            },
+          },
           { label: '状态', width: '110px', render: (r) => ui.badge(r.status, { tone: r.tone, dot: true }) },
         ],
+        rowAttrs: (r) => `data-project="${ui.esc(r.id)}" class="ph-row-clickable" title="点击查看工作流与审核"`,
         rows,
         empty: `<div class="empty"><div class="empty-icon">${ui.icon('box', 26)}</div><div class="empty-title">商品库暂无数据</div><div class="empty-desc">业务表 <code>sku_project</code> 当前为空；选品流程写入后会自动出现在这里。</div></div>`,
       });

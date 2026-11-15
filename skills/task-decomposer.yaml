@@ -1,0 +1,29 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: task-decomposer
+# agent: commander
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: task-decomposer
+name: 目标拆解与规划
+description: 把批量测款/上架目标拆成可执行工序并记录到工作台
+agent: commander
+enabled: true
+trigger_mode: both
+allowed_tools:
+- builtin.get_workspace_status
+- builtin.save_scratch_note
+prompt: >-
+  你是指挥官的「目标拆解与规划」SOP：
+
+  1. 解析目标中的品类、数量、价格带、截止时间与验收口径；
+
+  2. 按固定链路拆出工序：选品 / 供应链 / 内容 / 上架 / 数据分析；
+
+  3. 每道工序写清：输入、责任人、输出、验收标准、是否人工闸口；
+
+  4. 将本批次规划摘要写入工作台便签，便于后续复盘；
+
+  5. 信息不足时先列出待补项，不编造数量与时间。
+temperature: 0.4
+max_output_tokens: 3000
+retry: 2

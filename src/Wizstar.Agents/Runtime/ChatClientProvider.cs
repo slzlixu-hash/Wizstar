@@ -3,8 +3,8 @@ using Wizstar.Contracts;
 
 namespace Wizstar.Agents.Runtime;
 
-/// <summary>模型通道句柄：client + 运行模式 + 离线原因。</summary>
-public sealed record ChatClientHandle(IChatClient Client, string Mode, string? Reason);
+/// <summary>模型通道句柄：client + 运行模式 + 离线原因 + 实际模型 ID。</summary>
+public sealed record ChatClientHandle(IChatClient Client, string Mode, string? Reason, string? Model = null);
 
 /// <summary>
 /// 模型供给：优先读「系统设置」里的动态配置（数据库），其次读 appsettings 静态配置，
@@ -38,11 +38,11 @@ public sealed class ChatClientProvider(
         }
     }
 
-    public ChatClientHandle Get()
+    public ChatClientHandle Get(string? agentKey = null)
     {
         lock (_lock)
         {
-            var (settings, dynamicReason) = ResolveSettings();
+            var (settings, dynamicReason) = ResolveSettings(agentKey);
             var signature = SignatureOf(settings) + "|" + (dynamicReason ?? string.Empty);
             if (_handle is not null && _signature == signature)
             {
@@ -51,17 +51,20 @@ public sealed class ChatClientProvider(
 
             _handle = Build(settings, dynamicReason);
             _signature = signature;
-            logger.LogInformation("模型通道就绪: mode={Mode} reason={Reason} source={Source}",
-                _handle.Mode, _handle.Reason, settings is null ? "static" : settings.ProviderCode);
+            logger.LogInformation("模型通道就绪: mode={Mode} model={Model} reason={Reason} source={Source} agent={Agent}",
+                _handle.Mode, _handle.Model, _handle.Reason,
+                settings is null ? "static" : settings.ProviderCode, agentKey ?? "-");
             return _handle;
         }
     }
 
-    private (LlmRuntimeSettings? Settings, string? Reason) ResolveSettings()
+    private (LlmRuntimeSettings? Settings, string? Reason) ResolveSettings(string? agentKey)
     {
         try
         {
-            var settings = runtimeSettings?.GetCurrent();
+            var settings = string.IsNullOrWhiteSpace(agentKey)
+                ? runtimeSettings?.GetCurrent()
+                : runtimeSettings?.GetForAgent(agentKey);
             // 动态配置不可用时向配置源要一句可读原因，避免 health 显示误导性的「未配置模型」。
             var reason = settings is null ? runtimeSettings?.DescribeOffline() : null;
             return (settings, reason);
@@ -83,7 +86,7 @@ public sealed class ChatClientProvider(
         // 测试桩：脚本化 ChatClient 直接注入（跳过真实配置装配）
         if (forcedClient is not null)
         {
-            return new ChatClientHandle(forcedClient, "live", null);
+            return new ChatClientHandle(forcedClient, "live", null, "scripted");
         }
 
         var baseUrl = (settings is not null ? settings.BaseUrl : configuration["LLM:BaseUrl"])?.Trim();
@@ -106,6 +109,6 @@ public sealed class ChatClientProvider(
         var client = new OpenAiCompatibleChatClient(
             http, baseUrl, modelName, apiKey, temperature, maxTokens, logger);
 
-        return new ChatClientHandle(client, "live", null);
+        return new ChatClientHandle(client, "live", null, modelName);
     }
 }

@@ -20,7 +20,7 @@ namespace Wizstar.Data.Entities.Business
            /// Desc:
            /// Default:
            /// Nullable:False
-           /// </summary>           
+           /// </summary>
            [SugarColumn(IsPrimaryKey=true,IsIdentity=true,ColumnName="id")]
            public long Id {get;set;}
 
@@ -29,7 +29,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="agent_key")]           
+           [SugarColumn(ColumnName="agent_key")]
            public string AgentKey {get;set;}
 
            /// <summary>
@@ -37,7 +37,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="session_id")]           
+           [SugarColumn(ColumnName="session_id")]
            public string SessionId {get;set;}
 
            /// <summary>
@@ -45,7 +45,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(IsJson=true)]           
+           [SugarColumn(ColumnName="injected_memory_ids")]
            public string InjectedMemoryIds {get;set;} // JSON 文本
 
            /// <summary>
@@ -53,7 +53,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(IsJson=true)]           
+           [SugarColumn(ColumnName="injected_knowledge_ids")]
            public string InjectedKnowledgeIds {get;set;} // JSON 文本
 
            /// <summary>
@@ -61,7 +61,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:0
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="total_chars")]           
+           [SugarColumn(ColumnName="total_chars")]
            public int TotalChars {get;set;}
 
            /// <summary>
@@ -69,7 +69,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:true
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="truncated")]           
+           [SugarColumn(ColumnName="truncated")]
            public bool Truncated {get;set;}
 
            /// <summary>
@@ -77,7 +77,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:CURRENT_TIMESTAMP
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="created_at")]           
+           [SugarColumn(ColumnName="created_at")]
            public DateTime CreatedAt {get;set;}
 
     }

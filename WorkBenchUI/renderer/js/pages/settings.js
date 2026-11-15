@@ -505,8 +505,8 @@
   pages.settings = {
     title: '系统设置',
     subtitle: '',
-    // 退出登录：全局委托（app.js 监听 [data-logout]）→ 主进程清令牌并切回登录窗口
-    actions: ui.btn({ label: '退出登录', icon: 'power', tone: 'ghost', attrs: 'data-logout' }),
+    // 退出登录统一收进右上角用户菜单（切换用户 / 退出系统）
+    actions: '',
 
     render() {
       return `<div class="stack set-page">

@@ -81,7 +81,7 @@ public sealed class McpReconciler(McpCatalog catalog, ILogger<McpReconciler> log
 
         // ② 清单中已移除的服务 → 停用（不删数据）
         var configured = catalog.ConfiguredIds.ToHashSet(StringComparer.Ordinal);
-        foreach (var snapshot in catalog.ListSnapshots())
+        foreach (var snapshot in catalog.ListSnapshots(includeUnconfigured: true))
         {
             if (!configured.Contains(snapshot.Id) && snapshot.State != McpServiceState.Disabled)
             {

@@ -1,0 +1,21 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: category-attribute-mapping
+# agent: publisher
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: category-attribute-mapping
+name: 类目属性映射
+description: 将商品参数映射到微信小店/抖音类目属性与必填项
+agent: publisher
+enabled: true
+trigger_mode: chat
+allowed_tools: []
+prompt: |
+  你是上架专员的「类目属性映射」SOP：
+  1. 根据商品标题与材质，确定目标平台类目路径；
+  2. 列出该类目全部必填属性，并给出本商品取值；
+  3. 缺失属性必须标记「待补充」，不得用默认值蒙混；
+  4. 输出平台差异对照（微信小店 / 抖音小店）与提审前检查清单。
+temperature: 0.2
+max_output_tokens: 2500
+retry: 2

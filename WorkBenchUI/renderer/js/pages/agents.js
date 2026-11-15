@@ -6,8 +6,8 @@
  * 数据：WB.data.agents（GET /api/ui/bootstrap 的真实名册）+ WB.data.team.stats（GET /api/agents/stats）
  * 交互：
  *   - 搜索 / 状态筛选：前端过滤真实名册
- *   - 进入工作台：POST /api/agents/{key}/chat 真实对话（模型通道 offline 时如实提示）
- *   - 查看配置：GET /api/agents/{key} 展示完整 systemPrompt 与授权工具
+ *   - 进入工作台：右滑 Agent 工作台（对话 / 记忆 / 上下文 / 配置），全部走真实接口
+ *   - 查看配置：直接打开工作台的「配置」分区
  *
  * 名册由 `config/agents.yaml` 声明式管理，本页不提供「新建 Agent」——没有写入端点就不给假按钮。
  */
@@ -72,6 +72,7 @@
   function cardHtml(agent) {
     const tone = TONE_RGB[agent.tone] ? agent.tone : 'cyan';
     const searchText = [agent.name, agent.en, agent.desc, agent.mcp, agent.status].join(' ').toLowerCase();
+    const quickCount = (agent.quickPrompts || []).length;
 
     return `<article class="team-card" data-team-card data-search="${ui.esc(searchText)}"
       data-enabled="${agent.online ? '1' : '0'}"
@@ -102,144 +103,23 @@
         <span><span class="team-meta-label">授权工具：</span>${
           agent.wildcard ? '<b>全部</b><span>（通配 *）</span>' : `<b class="num">${ui.num(agent.rules)}</b><span>条</span>`
         }</span>
-        <span><span class="team-meta-label">${ui.esc(agent.todayLabel)}：</span><b class="num">${ui.num(agent.today)}</b><span>步</span></span>
+        <span><span class="team-meta-label">${quickCount ? '快捷指令：' : '最大步数：'}</span><b class="num">${
+          quickCount ? ui.num(quickCount) : ui.num(agent.today)
+        }</b><span>${quickCount ? '条' : '步'}</span></span>
       </div>
 
       <div class="team-actions">
-        ${ui.btn({ label: '进入工作台', tone: 'primary', size: 'sm', attrs: `data-team-enter="${ui.esc(agent.id)}"` })}
+        ${ui.btn({ label: '管理界面', tone: 'primary', size: 'sm', attrs: `data-team-enter="${ui.esc(agent.id)}"` })}
         ${ui.btn({ label: '查看配置', tone: 'ghost', size: 'sm', attrs: `data-team-config="${ui.esc(agent.id)}"` })}
       </div>
     </article>`;
-  }
-
-  /* ------------------------------ 真实对话 ------------------------------ */
-
-  function openChatModal(agent, ctx) {
-    const conversationId = 'ui-' + agent.id + '-' + Date.now();
-
-    const overlay = ui.modal({
-      title: `工作台 · ${agent.name}`,
-      desc: '消息经 POST /api/agents/{key}/chat 直达后端；模型通道 offline 时会如实提示。',
-      body: `<div class="team-chat">
-        <div class="team-chat-log" data-chat-log>
-          <div class="team-chat-hint">向「${ui.esc(agent.name)}」发送一条消息开始会话。</div>
-        </div>
-        <div class="team-chat-input">
-          ${ui.input({ placeholder: '输入消息，回车发送', attrs: 'data-chat-input autocomplete="off"' })}
-          ${ui.btn({ label: '发送', icon: 'zap', tone: 'primary', size: 'sm', attrs: 'data-chat-send' })}
-        </div>
-      </div>`,
-      actions: `${ui.btn({ label: '关闭', tone: 'ghost', attrs: 'data-modal-close' })}`,
-    });
-
-    const log = overlay.querySelector('[data-chat-log]');
-    const input = overlay.querySelector('[data-chat-input]');
-    const sendBtn = overlay.querySelector('[data-chat-send]');
-
-    function bubble(kind, text, meta) {
-      const cls =
-        kind === 'user' ? 'team-chat-msg team-chat-msg--user'
-          : kind === 'error' ? 'team-chat-msg team-chat-msg--error'
-            : 'team-chat-msg team-chat-msg--agent';
-      const el = document.createElement('div');
-      el.className = cls;
-      el.innerHTML = `<div class="team-chat-body">${ui.esc(text)}</div>${
-        meta ? `<div class="team-chat-meta">${ui.esc(meta)}</div>` : ''
-      }`;
-      log.appendChild(el);
-      log.scrollTop = log.scrollHeight;
-    }
-
-    let busy = false;
-
-    async function send() {
-      const text = String(input.value || '').trim();
-      if (!text || busy) return;
-
-      busy = true;
-      sendBtn.disabled = true;
-      const hint = log.querySelector('.team-chat-hint');
-      if (hint) hint.remove();
-
-      bubble('user', text);
-      input.value = '';
-
-      const res = await WB.api.request('POST', '/api/agents/' + encodeURIComponent(agent.id) + '/chat', {
-        conversationId: conversationId,
-        message: text,
-      });
-
-      busy = false;
-      sendBtn.disabled = false;
-      input.focus();
-
-      if (!res.ok) {
-        bubble('error', '调用失败：' + (res.error || '服务未连接'));
-        return;
-      }
-
-      const d = res.data || {};
-      bubble('agent', d.output || '（模型未返回文本）', [
-        d.mode ? '通道 ' + d.mode : '',
-        d.assembledTools != null ? '装配工具 ' + d.assembledTools : '',
-        d.elapsedMs != null ? d.elapsedMs + ' ms' : '',
-      ].filter(Boolean).join(' · '));
-
-      if (Array.isArray(d.pendingApprovalIds) && d.pendingApprovalIds.length) {
-        bubble('error', `已挂起 ${d.pendingApprovalIds.length} 个审批单，请到「工作台」处理后再继续。`);
-      }
-
-      if (String(d.mode || '') === 'offline' && d.message) {
-        bubble('error', '模型通道 offline：' + d.message);
-      }
-    }
-
-    sendBtn.addEventListener('click', send);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        send();
-      }
-    });
-    input.focus();
-  }
-
-  /* ------------------------------ 查看配置（真实 systemPrompt） ------------------------------ */
-
-  async function openConfigModal(agentId, ctx) {
-    const res = await WB.api.request('GET', '/api/agents/' + encodeURIComponent(agentId));
-    if (!res.ok) {
-      ctx.toast('读取配置失败：' + (res.error || '服务未连接'), 'warn');
-      return;
-    }
-
-    const p = res.data || {};
-    const tools = Array.isArray(p.allowedTools) ? p.allowedTools : [];
-
-    ui.modal({
-      title: `配置 · ${p.displayName || p.key}`,
-      desc: '来自 config/agents.yaml（后端只读加载）。',
-      body: `${ui.kv([
-        ['Key', ui.esc(p.key || '')],
-        ['英文名', ui.esc(p.name || '')],
-        ['职责', ui.esc(p.description || '—')],
-        ['启用状态', p.enabled === false ? '已停用' : '已启用'],
-        ['最大步数', `<b class="num">${ui.num(p.maxSteps)}</b> 步`],
-        ['授权工具', tools.length ? tools.map((t) => `<code>${ui.esc(t)}</code>`).join(' ') : '未授权任何工具'],
-      ])}
-      <div class="divider mt-16"></div>
-      <div class="field-label mt-8">System Prompt</div>
-      <pre class="team-prompt">${ui.esc(p.systemPrompt || '（未配置）')}</pre>`,
-      actions: `${ui.btn({ label: '关闭', tone: 'ghost', attrs: 'data-modal-close' })}`,
-    });
   }
 
   /* ------------------------------ 页面注册 ------------------------------ */
 
   pages.agents = {
     title: 'Agent 团队管理',
-    subtitle: '',
-    actions: ui.userCluster(),
+    subtitle: '6 位 Agent 的分工、记忆与上下文 · 人设来自 config/agents.yaml',
 
     render(ctx) {
       const agents = ctx.data.agents || [];
@@ -301,11 +181,22 @@
 
       ui.bind(page, '[data-team-enter]', 'click', (e) => {
         const agent = findAgent(e.currentTarget.getAttribute('data-team-enter'));
-        if (agent) openChatModal(agent, ctx);
+        if (!agent) return;
+        // 指挥官：独立窗口铺满整个界面（不在主壳内容框里）；其余 Agent：右滑工作台
+        if (agent.id === 'commander') {
+          if (window.workbench && typeof window.workbench.openCommander === 'function') {
+            window.workbench.openCommander();
+            return;
+          }
+          window.location.href = 'commander.html';
+          return;
+        }
+        if (WB.agentWorkbench) WB.agentWorkbench.open(agent, 'chat');
       });
 
       ui.bind(page, '[data-team-config]', 'click', (e) => {
-        openConfigModal(e.currentTarget.getAttribute('data-team-config'), ctx);
+        const agent = findAgent(e.currentTarget.getAttribute('data-team-config'));
+        if (agent && WB.agentWorkbench) WB.agentWorkbench.open(agent, 'config');
       });
     },
   };

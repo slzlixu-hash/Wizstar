@@ -15,7 +15,17 @@ public sealed record AgentProfile(
     string SystemPrompt,
     IReadOnlyList<string> AllowedTools,
     int MaxSteps,
-    bool Enabled);
+    bool Enabled,
+    string Avatar = "",
+    string Tone = "cyan",
+    IReadOnlyList<string>? QuickPrompts = null)
+{
+    /// <summary>头像名（WorkBenchUI/ico/&lt;avatar&gt;.ico）；缺省用 key。</summary>
+    public string AvatarName => string.IsNullOrWhiteSpace(Avatar) ? Key : Avatar;
+
+    /// <summary>工作台快捷指令（可为空）。</summary>
+    public IReadOnlyList<string> QuickPromptList => QuickPrompts ?? [];
+}
 
 /// <summary>agents.yaml 的反序列化模型（camelCase 字段，均带默认值）。</summary>
 public sealed class AgentEntry
@@ -28,6 +38,9 @@ public sealed class AgentEntry
     public List<string>? AllowedTools { get; set; }
     public int MaxSteps { get; set; } = 8;
     public bool Enabled { get; set; } = true;
+    public string? Avatar { get; set; }
+    public string? Tone { get; set; }
+    public List<string>? QuickPrompts { get; set; }
 }
 
 public sealed class AgentFile

@@ -37,6 +37,9 @@ public static class UiEndpoints
                     enabled = p.Enabled,
                     maxSteps = p.MaxSteps,
                     allowedTools = p.AllowedTools,
+                    avatar = p.AvatarName,
+                    tone = p.Tone,
+                    quickPrompts = p.QuickPromptList,
                     systemPromptPreview = p.SystemPrompt.Length > 120
                         ? p.SystemPrompt[..120] + "…"
                         : p.SystemPrompt

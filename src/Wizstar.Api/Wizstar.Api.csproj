@@ -28,4 +28,9 @@
     <InternalsVisibleTo Include="Wizstar.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 工作流配方（pipelines/*.yaml）解析 -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
 </Project>

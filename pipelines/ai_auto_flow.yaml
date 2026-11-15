@@ -1,0 +1,39 @@
+# AI 自主选品快测流（示例配方，默认停用）
+#
+# 快测场景：AI 自主选品后直接快出内容并上架小批量试水，最后复盘。
+# 与技术无关：启用/停用只在编辑器或 enabled 字段切换，运行台按来源解析时跳过停用配方。
+pipeline_id: ai_auto_flow
+name: AI 自主选品快测流
+enabled: false
+trigger_source: ai_autonomous
+description: AI 自主选品 → 内容快出 → 小批量上架 → 数据复盘（默认停用，可按需启用）
+stages:
+  - code: scout_ingest
+    name: AI 自主选品
+    type: auto
+    agent: scout
+    skill: ai_select_skill
+    next: creative_media
+
+  - code: creative_media
+    name: 内容快出
+    type: auto
+    agent: creative
+    skill: media_enrich_skill
+    panel: media_compare
+    next: publish_online
+
+  - code: publish_online
+    name: 小批量上架
+    type: auto
+    agent: publisher
+    skill: shop_publish_skill
+    mode: direct_publish
+    next: analyst_review
+
+  - code: analyst_review
+    name: 数据复盘
+    type: auto
+    agent: analyst
+    skill: performance_review_skill
+    next: null

@@ -17,9 +17,27 @@ public sealed class ScriptedChatClient(IReadOnlyList<Func<ChatResponse>> script)
 {
     private int _index;
 
+    /// <summary>每轮调用时的最后一条 user 消息（验证上下文/附件注入用）。</summary>
+    public List<string> LastUserMessages { get; } = [];
+
+    /// <summary>每轮调用时的全部 system 消息（验证 Skill SOP 注入用）。</summary>
+    public List<string> LastSystemMessages { get; } = [];
+
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
+        var lastUser = messages.LastOrDefault(m => m.Role == ChatRole.User);
+        if (lastUser is not null)
+        {
+            LastUserMessages.Add(string.Join("", lastUser.Contents.OfType<TextContent>().Select(c => c.Text)));
+        }
+        var system = messages.Where(m => m.Role == ChatRole.System)
+            .Select(m => string.Join("", m.Contents.OfType<TextContent>().Select(c => c.Text)))
+            .ToList();
+        if (system.Count > 0)
+        {
+            LastSystemMessages.Add(string.Join("\n", system));
+        }
         var step = Math.Min(Interlocked.Increment(ref _index) - 1, script.Count - 1);
         return Task.FromResult(script[step]());
     }
@@ -72,7 +90,8 @@ public class AgentRunnerTests : IDisposable
         """;
 
     private (AgentRunner Runner, InMemoryApprovalStore Approvals) BuildRunner(
-        IChatClient chatClient, AgentProfile profile)
+        IChatClient chatClient, AgentProfile profile, Wizstar.Agents.Skills.SkillCatalog? skills = null,
+        Wizstar.Agents.Audit.IAuditTrail? auditTrail = null, AgentMcpPolicyStore? mcpPolicy = null)
     {
         var loggerFactory = LoggerFactoryHolder.CreateFactory();
 
@@ -91,7 +110,7 @@ public class AgentRunnerTests : IDisposable
             loggerFactory.CreateLogger<ChatClientProvider>(), chatClient);
         var runner = new AgentRunner(
             catalog, registry, invoker, chatProvider, new ConversationStore(),
-            loggerFactory, loggerFactory.CreateLogger<AgentRunner>());
+            loggerFactory, loggerFactory.CreateLogger<AgentRunner>(), null, skills, auditTrail, mcpPolicy);
         return (runner, approvals);
     }
 
@@ -108,6 +127,40 @@ public class AgentRunnerTests : IDisposable
         Assert.Equal("completed", result.Status);
         Assert.Contains("直接回答", result.Output);
         Assert.Empty(result.Trace);
+    }
+
+    [Fact]
+    public async Task AgentMcpPolicySlice_RestrictsToolsForAgent()
+    {
+        var policyPath = Path.Combine(Path.GetTempPath(), $"wizstar-mcp-policy-{Guid.NewGuid():N}.json");
+        _tempFiles.Add(policyPath);
+        var loggerFactory = LoggerFactoryHolder.CreateFactory();
+        var policy = new AgentMcpPolicyStore(policyPath, loggerFactory.CreateLogger<AgentMcpPolicyStore>());
+        policy.SetSlice("agent", "builtin", ["get_workspace_status"]);
+
+        var chat = new ScriptedChatClient([
+            () => new ChatResponse(new ChatMessage(ChatRole.Assistant, "只暴露一个工具。"))
+        ]);
+        var (runner, _) = BuildRunner(chat, Profile(), null, null, policy);
+
+        var result = await runner.RunAsync(new AgentRunOptions("agent", "conv-mcp-slice", "你好"));
+
+        Assert.Equal(1, result.AssembledTools);
+    }
+
+    [Fact]
+    public async Task Attachments_AreInjectedIntoUserMessage()
+    {
+        var chat = new ScriptedChatClient([() => new ChatResponse(new ChatMessage(ChatRole.Assistant, "收到"))]);
+        var (runner, _) = BuildRunner(chat, Profile());
+
+        var result = await runner.RunAsync(new AgentRunOptions(
+            "agent", "conv-attach", "看下附件",
+            [new AgentAttachment("选品清单.csv", "text/csv", 35, "商品名,采购价\n保温杯X,12.5")]));
+
+        Assert.Equal("completed", result.Status);
+        Assert.Contains(chat.LastUserMessages, text =>
+            text.Contains("【挂载附件】") && text.Contains("选品清单.csv") && text.Contains("保温杯X"));
     }
 
     [Fact]
@@ -227,7 +280,182 @@ public class AgentRunnerTests : IDisposable
         Assert.True(result.Trace.Count <= profile.MaxSteps + 2);
     }
 
+    [Fact]
+    public async Task Skill_SlicesTools_InjectsPrompt_AndHotReloads()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"wizstar-skills-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var file = Path.Combine(directory, "test-sop.yaml");
+        try
+        {
+            File.WriteAllText(file, """
+                code: test-sop
+                name: Test SOP
+                agent: agent
+                enabled: true
+                trigger_mode: chat
+                allowed_tools:
+                - builtin.get_workspace_status
+                prompt: |
+                  SKILL SOP PROMPT V1
+                temperature: 0.2
+                max_output_tokens: 500
+                retry: 1
+                """);
+            var skillCatalog = new Wizstar.Agents.Skills.SkillCatalog(
+                directory, LoggerFactoryHolder.CreateFactory().CreateLogger<Wizstar.Agents.Skills.SkillCatalog>());
+
+            var chat = new ScriptedChatClient([
+                () => new ChatResponse(new ChatMessage(ChatRole.Assistant, "V1")),
+                () => new ChatResponse(new ChatMessage(ChatRole.Assistant, "V2"))
+            ]);
+            var (runner, _) = BuildRunner(chat, Profile(), skillCatalog);
+
+            var first = await runner.RunAsync(
+                new AgentRunOptions("agent", "conv-skill", "hi", null, null, "test-sop"));
+            Assert.Equal("test-sop", first.Skill);
+            Assert.Equal(1, first.AssembledTools);
+            Assert.Contains("SKILL SOP PROMPT V1", chat.LastSystemMessages[^1]);
+
+            File.WriteAllText(file, """
+                code: test-sop
+                name: Test SOP
+                agent: agent
+                enabled: true
+                trigger_mode: chat
+                allowed_tools:
+                - builtin.get_workspace_status
+                - builtin.save_scratch_note
+                prompt: |
+                  SKILL SOP PROMPT V2
+                temperature: 0.2
+                max_output_tokens: 500
+                retry: 1
+                """);
+            skillCatalog.ReloadNow();
+
+            var second = await runner.RunAsync(
+                new AgentRunOptions("agent", "conv-skill-2", "hi", null, null, "test-sop"));
+            Assert.Equal(2, second.AssembledTools);
+            Assert.Contains("SKILL SOP PROMPT V2", chat.LastSystemMessages[^1]);
+        }
+        finally
+        {
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Skill_BoundToAnotherAgent_IsRejected()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"wizstar-skills-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var file = Path.Combine(directory, "other-sop.yaml");
+        try
+        {
+            File.WriteAllText(file, """
+                code: other-sop
+                name: Other SOP
+                agent: someone-else
+                enabled: true
+                trigger_mode: chat
+                allowed_tools: []
+                prompt: |
+                  other
+                """);
+            var skillCatalog = new Wizstar.Agents.Skills.SkillCatalog(
+                directory, LoggerFactoryHolder.CreateFactory().CreateLogger<Wizstar.Agents.Skills.SkillCatalog>());
+            var chat = new ScriptedChatClient([() => new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok"))]);
+            var (runner, _) = BuildRunner(chat, Profile(), skillCatalog);
+
+            await Assert.ThrowsAsync<ApiException>(() =>
+                runner.RunAsync(new AgentRunOptions("agent", "conv-skill", "hi", null, null, "other-sop")));
+        }
+        finally
+        {
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("chat", "chat")]
+    [InlineData("auto", "auto")]
+    [InlineData("both", "both")]
+    [InlineData("chat,auto", "both")]
+    [InlineData("", "chat")]
+    public void SkillRules_NormalizesTriggerMode(string input, string expected)
+    {
+        Assert.Equal(expected, Wizstar.Agents.Skills.SkillRules.NormalizeTriggerMode(input));
+    }
+
+    [Fact]
+    public async Task AutoOnlySkill_CannotBeInvokedFromChat()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"wizstar-skills-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var file = Path.Combine(directory, "auto-only.yaml");
+        try
+        {
+            File.WriteAllText(file, """
+                code: auto-only
+                name: Auto Only
+                agent: agent
+                enabled: true
+                trigger_mode: auto
+                allowed_tools: []
+                prompt: |
+                  auto only
+                """);
+            var skillCatalog = new Wizstar.Agents.Skills.SkillCatalog(
+                directory, LoggerFactoryHolder.CreateFactory().CreateLogger<Wizstar.Agents.Skills.SkillCatalog>());
+            var chat = new ScriptedChatClient([() => new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok"))]);
+            var (runner, _) = BuildRunner(chat, Profile(), skillCatalog);
+
+            await Assert.ThrowsAsync<ApiException>(() =>
+                runner.RunAsync(new AgentRunOptions("agent", "conv-auto", "hi", null, null, "auto-only")));
+        }
+        finally
+        {
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ToolCall_IsWrittenToAuditTrail()
+    {
+        var chat = new ScriptedChatClient([
+            () => MakeToolCall("builtin__get_workspace_status"),
+            () => new ChatResponse(new ChatMessage(ChatRole.Assistant, "已查询。"))
+        ]);
+        var trail = new CapturingAuditTrail();
+        var (runner, _) = BuildRunner(chat, Profile(), null, trail);
+
+        await runner.RunAsync(new AgentRunOptions("agent", "conv-audit", "看下状态"));
+
+        var entry = Assert.Single(trail.Entries);
+        Assert.Equal("agent", entry.AgentKey);
+        Assert.Equal("builtin", entry.ServerId);
+        Assert.Equal("get_workspace_status", entry.Action);
+        Assert.Equal("executed", entry.Status);
+        Assert.Equal("{}", entry.ArgumentsJson);
+        Assert.Null(entry.ErrorCode);
+        Assert.True(entry.ElapsedMs >= 0);
+    }
+
     // ---------------------------------------------------------------- 辅助
+
+    private sealed class CapturingAuditTrail : Wizstar.Agents.Audit.IAuditTrail
+    {
+        public List<Wizstar.Agents.Audit.AuditTrailEntry> Entries { get; } = [];
+
+        public Task RecordAsync(
+            Wizstar.Agents.Audit.AuditTrailEntry entry,
+            CancellationToken cancellationToken = default)
+        {
+            Entries.Add(entry);
+            return Task.CompletedTask;
+        }
+    }
 
     private static ChatResponse MakeToolCall(string functionName, string argsJson = "{}")
     {

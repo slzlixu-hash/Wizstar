@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using SqlSugar;
 using Wizstar.Agents.Governance;
+using Wizstar.Api.Pipelines;
 using Wizstar.Contracts;
 using Wizstar.Data.Entities.Business;
 
@@ -68,6 +69,7 @@ public static class BusinessEndpoints
         /* ------------------------------ 商品管理 ------------------------------ */
         group.MapGet("/products", (
             ISqlSugarClient db,
+            PipelineCatalog pipelines,
             [FromQuery] string? keyword,
             [FromQuery] string? status) =>
         {
@@ -94,6 +96,14 @@ public static class BusinessEndpoints
                     var price = p.SuggestedPrice > 0
                         ? p.SuggestedPrice
                         : priceByProject.GetValueOrDefault(p.Id);
+
+                    // 流程进度：已绑定配方优先，否则按选品来源映射（映射来自 YAML，不写死来源分支）
+                    var recipe = pipelines.Get(p.PipelineId) ?? pipelines.ResolveBySource(p.SelectionSource);
+                    var stage = recipe?.FindStage(p.CurrentStage) ?? recipe?.FirstStage;
+                    var stageStatus = string.IsNullOrWhiteSpace(p.StageStatus)
+                        ? PipelineStageStatus.Pending
+                        : p.StageStatus;
+
                     return new
                     {
                         id = p.ProjectNo,
@@ -109,6 +119,16 @@ public static class BusinessEndpoints
                         category = p.CategoryName ?? string.Empty,
                         marginRate = p.AvgMarginRate,
                         updatedAt = p.UpdatedAt,
+                        // 工作流进度
+                        pipelineId = recipe?.PipelineId ?? p.PipelineId,
+                        pipelineName = recipe?.Name,
+                        selectionSource = p.SelectionSource,
+                        currentStage = stage?.Code,
+                        currentStageName = stage?.Name ?? stage?.Code,
+                        stageStatus,
+                        stageNote = p.StageNote,
+                        stageIndex = recipe is not null && stage is not null ? recipe.IndexOf(stage.Code) + 1 : 0,
+                        stageTotal = recipe?.Stages.Count ?? 0,
                     };
                 })
                 .ToList();
@@ -138,6 +158,79 @@ public static class BusinessEndpoints
 
             return Results.Ok(ApiEnvelope<object>.Ok(new { stats, rows, total = rows.Count }, string.Empty));
         });
+
+        /* 新建任务：按工作流配方落一条 sku_project（首工序 pending），供指挥官界面派发。 */
+        group.MapPost("/products", (CreateProductTaskRequest? request, ISqlSugarClient db, PipelineCatalog pipelines, HttpContext context) =>
+        {
+            if (request is null || string.IsNullOrWhiteSpace(request.Title))
+            {
+                return Results.BadRequest(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, "任务名称不能为空", context.TraceIdentifier));
+            }
+
+            var recipe = pipelines.Get(request.PipelineId);
+            if (recipe is null)
+            {
+                return Results.BadRequest(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"工作流配方不存在: {request.PipelineId}", context.TraceIdentifier));
+            }
+
+            var first = recipe.FirstStage;
+            if (first is null)
+            {
+                return Results.BadRequest(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"配方 {recipe.PipelineId} 没有可执行工序", context.TraceIdentifier));
+            }
+
+            var projectNo = NextProjectNo(db);
+            var now = DateTime.Now;
+            var entity = new SkuProject
+            {
+                ProjectNo = projectNo,
+                BatchId = string.IsNullOrWhiteSpace(request.BatchId) ? string.Empty : request.BatchId.Trim(),
+                Title = request.Title.Trim(),
+                CategoryName = string.IsNullOrWhiteSpace(request.Category) ? string.Empty : request.Category.Trim(),
+                SelectionSource = recipe.TriggerSource,
+                PipelineId = recipe.PipelineId,
+                CurrentStage = first.Code,
+                StageStatus = PipelineStageStatus.Pending,
+                StageNote = "任务已创建，等待推进",
+                Status = "scouted",
+                CoverImageUrl = string.Empty,
+                MinCost = 0,
+                SuggestedPrice = 0,
+                AvgMarginRate = 0,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+
+            db.Insertable(entity).ExecuteCommand();
+
+            return Results.Ok(ApiEnvelope<object>.Ok(new
+            {
+                id = projectNo,
+                title = entity.Title,
+                pipelineId = recipe.PipelineId,
+                pipelineName = recipe.Name,
+                currentStage = first.Code,
+                currentStageName = first.Name ?? first.Code,
+            }, context.TraceIdentifier));
+        });
+
+        /// 任务编号：T-yyyyMMdd-NN（按当天已有任务顺延，最多 99）
+        static string NextProjectNo(ISqlSugarClient db)
+        {
+            var prefix = "T-" + DateTime.Now.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "-";
+            var existing = db.Queryable<SkuProject>()
+                .Where(p => p.ProjectNo.StartsWith(prefix))
+                .Select(p => p.ProjectNo)
+                .ToList();
+            var next = existing
+                .Select(no => int.TryParse(no[prefix.Length..], out var n) ? n : 0)
+                .DefaultIfEmpty(0)
+                .Max() + 1;
+            return prefix + next.ToString("00", CultureInfo.InvariantCulture);
+        }
 
         /* ------------------------------ 订单履约 ------------------------------ */
         group.MapGet("/orders", (

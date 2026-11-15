@@ -70,52 +70,34 @@
     reload: function () { return loadAll(); },
   };
 
-  /* ------------------------------ 状态标记 ------------------------------ */
-
-  function setBadge(text, tone) {
-    const anchor = document.getElementById('sidebar-version') || document.getElementById('login-endpoint');
-    if (!anchor || !anchor.parentNode) return;
-
-    let badge = document.getElementById('wb-data-source');
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.id = 'wb-data-source';
-      badge.style.cssText =
-        'display:inline-block;margin-left:6px;font-size:10px;line-height:1.5;' +
-        'padding:1px 6px;border-radius:4px;letter-spacing:.02em;vertical-align:middle;white-space:nowrap;';
-      anchor.parentNode.insertBefore(badge, anchor.nextSibling);
-    }
-    badge.textContent = text;
-    badge.style.color = tone === 'live' ? '#7ee2a8' : tone === 'loading' ? '#9fb4cc' : '#e5b567';
-    badge.style.background =
-      tone === 'live' ? 'rgba(46,160,96,.16)' : tone === 'loading' ? 'rgba(120,150,180,.14)' : 'rgba(220,160,60,.14)';
-    badge.style.border =
-      '1px solid ' + (tone === 'live' ? 'rgba(46,160,96,.35)' : tone === 'loading' ? 'rgba(120,150,180,.30)' : 'rgba(220,160,60,.30)');
-  }
+  /* ------------------------------ 服务状态 ------------------------------ */
 
   function setServiceStatus(online) {
-    const dot = document.querySelector('.status-dot');
+    // 主窗口：状态与地址展示在标题栏
+    const dot = document.getElementById('titlebar-status-dot');
     if (dot) dot.className = 'status-dot ' + (online ? 'online' : 'offline');
+    const text = document.getElementById('titlebar-status-text');
+    if (text) text.textContent = online ? '本地服务正常' : '本地服务离线';
+    const endpointEl = document.getElementById('titlebar-endpoint');
+    if (endpointEl) {
+      endpointEl.textContent = (data && data.app && data.app.endpoint) || API_ENDPOINT;
+    }
 
+    // 登录页：保持原有服务状态行
     const label = document.querySelector('.login-service > span:not(.login-endpoint)');
     if (label) label.textContent = online ? '本地服务连接正常' : '本地服务离线';
-
-    const endpointEl = document.getElementById('login-endpoint');
-    if (endpointEl) {
-      endpointEl.textContent = '(' + ((data && data.app && data.app.endpoint) || API_ENDPOINT) + ')';
+    const loginEndpoint = document.getElementById('login-endpoint');
+    if (loginEndpoint) {
+      loginEndpoint.textContent = '(' + ((data && data.app && data.app.endpoint) || API_ENDPOINT) + ')';
     }
-  }
-
-  /** 侧边栏运行模式文案：反映真实模型通道（chatMode），不再是静态「界面演示」。 */
-  function setSidebarMode(text) {
-    const el = document.getElementById('sidebar-mode');
-    if (el) el.textContent = text || '';
   }
 
   function markLoading() {
     if (data && data.app) data.app.source = 'loading';
-    setBadge('加载中', 'loading');
-    setSidebarMode('连接中');
+    const dot = document.getElementById('titlebar-status-dot');
+    if (dot) dot.className = 'status-dot cyan';
+    const text = document.getElementById('titlebar-status-text');
+    if (text) text.textContent = '正在连接本地服务…';
   }
 
   function markLive() {
@@ -123,9 +105,7 @@
       data.app.source = 'live';
       data.app.error = null;
     }
-    setBadge('实时', 'live');
     setServiceStatus(true);
-    setSidebarMode(data && data.chatMode === 'live' ? '模型在线' : '模型离线');
 
     // 登录页 / 侧边栏都在数据层异步完成前就已渲染（骨架里是占位「—」），
     // 这里补一次真实版本号与端点，避免外壳静态文案停留在占位值。
@@ -133,10 +113,8 @@
     if (version && version !== '—') {
       const loginVersion = document.getElementById('login-version');
       if (loginVersion) loginVersion.textContent = version;
-      const sidebarVersion = document.getElementById('sidebar-version');
-      if (sidebarVersion) sidebarVersion.textContent = version;
     }
-    const endpoint = document.getElementById('sidebar-endpoint');
+    const endpoint = document.getElementById('titlebar-endpoint');
     if (endpoint && data && data.app && data.app.endpoint) {
       endpoint.textContent = data.app.endpoint;
     }
@@ -147,9 +125,7 @@
       data.app.source = 'offline';
       data.app.error = reason || '后端服务未连接';
     }
-    setBadge('离线 · 后端未连接', 'offline');
     setServiceStatus(false);
-    setSidebarMode('服务离线');
   }
 
   /* ------------------------------ 适配：Agent 名册 ------------------------------ */
@@ -161,6 +137,8 @@
       const enabled = a.enabled !== false && a.Enabled !== false;
       const display = String(a.displayName || a.DisplayName || a.name || a.Name || key);
       const en = String(a.name || a.Name || key);
+      const avatarName = String(a.avatar || a.Avatar || key).replace(/[^a-zA-Z0-9_-]/g, '') || key;
+      const quick = Array.isArray(a.quickPrompts || a.QuickPrompts) ? (a.quickPrompts || a.QuickPrompts) : [];
       // "*" 是通配授权：实际可见工具数取决于已连接的服务，静态不可知，界面单独表述
       const wildcard = tools.includes('*');
 
@@ -170,7 +148,7 @@
         en: en.charAt(0).toUpperCase() + en.slice(1),
         desc: String(a.description || a.Description || ''),
         status: enabled ? '待命中' : '已停用',
-        tone: enabled ? TONES[i % TONES.length] : 'slate',
+        tone: enabled ? String(a.tone || a.Tone || TONES[i % TONES.length]) : 'slate',
         dot: enabled ? 'online' : 'slate',
         mcp: wildcard
           ? '全部工具（通配授权 *）'
@@ -183,8 +161,11 @@
         today: Number(a.maxSteps || a.MaxSteps) || 0,
         load: null,
         online: enabled,
-        avatar: true,
-        photo: false,
+        // 头像取 WorkBenchUI/ico/<avatar>.ico（缺图时组件自动回落首字）
+        avatar: '../ico/' + avatarName + '.ico',
+        photo: true,
+        initial: display.slice(0, 1) || 'A',
+        quickPrompts: quick.filter(function (q) { return typeof q === 'string' && q.trim(); }),
       };
     });
   }
@@ -254,6 +235,8 @@
     const authHeaderName = String((rs && (rs.authHeaderName || rs.AuthHeaderName)) || '');
     // 内置/外部：清单 builtin 标记（内置可改不可删，外部全 CRUD）
     const builtin = !!(rs && (rs.builtin !== undefined ? rs.builtin : rs.Builtin));
+    // 自定义请求头只回显键名，值永不回到渲染层
+    const headerKeys = ((rs && (rs.headerKeys || rs.HeaderKeys)) || []).map(String);
 
     const meta = own.map(function (t) {
       return {
@@ -285,6 +268,7 @@
       authType: authType,
       authHeaderName: authHeaderName,
       authLabel: ({ none: '免鉴权', bearer: 'Bearer Key', header: '自定义 Header', hmac: 'MCP-HMAC' })[authType] || authType,
+      headerKeys: headerKeys,
       builtin: builtin,
       transport: url || (String((rs && (rs.transport || rs.Transport)) || 'http').toUpperCase()),
       transportType: state === 'disabled' ? 'pending' : 'http',
@@ -346,6 +330,7 @@
       };
     },
     reconcile: function () { return WB.api.request('POST', '/api/mcp/reconcile', {}); },
+    probe: function (body) { return WB.api.request('POST', '/api/mcp/probe', body); },
     handshake: function (id) {
       return WB.api.request('POST', '/api/mcp/servers/' + encodeURIComponent(id) + '/handshake', {});
     },

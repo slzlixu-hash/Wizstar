@@ -31,6 +31,12 @@ public sealed class McpJsonRpcClient(
 
     public string ServerId { get; } = serverId;
 
+    /// <summary>最近一次 initialize 的原始 JSON 响应（在线调试终端展示用）。</summary>
+    public string? LastInitializeJson { get; private set; }
+
+    /// <summary>最近一次 tools/list 的原始 JSON 响应（在线调试终端展示用）。</summary>
+    public string? LastToolsListJson { get; private set; }
+
     public bool IsInitialized
     {
         get { lock (_lock) { return _initialized; } }
@@ -57,6 +63,7 @@ public sealed class McpJsonRpcClient(
             },
             ct).ConfigureAwait(false);
 
+        LastInitializeJson = response.RootElement.GetRawText();
         var result = response.RootElement.TryGetProperty("result", out var resultNode)
             ? resultNode
             : response.RootElement;
@@ -101,6 +108,7 @@ public sealed class McpJsonRpcClient(
         await ConnectAsync(ct).ConfigureAwait(false);
 
         var response = await SendRequestAsync("tools/list", new { }, ct).ConfigureAwait(false);
+        LastToolsListJson = response.RootElement.GetRawText();
         var tools = new List<McpToolInfo>();
 
         var resultNode = response.RootElement.ValueKind == JsonValueKind.Object
@@ -317,6 +325,27 @@ public sealed class McpJsonRpcClient(
                 break;
 
             // case McpAuthTypes.None：本地服务直连，不带任何 Authorization 头
+        }
+
+        // 自定义请求头：与鉴权模式解耦，供企业网关透传租户等标识。
+        if (config.Headers is { Count: > 0 })
+        {
+            foreach (var pair in config.Headers)
+            {
+                var name = (pair.Key ?? string.Empty).Trim();
+                if (name.Length == 0) continue;
+                if (name.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Host", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Accept", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                request.Headers.TryAddWithoutValidation(name, pair.Value ?? string.Empty);
+            }
         }
 
         // 店铺凭证：仅走 HTTP 头透传，严禁进 JSON-RPC 消息体 / 日志 / Prompt（规范 §2.3 安全红线）

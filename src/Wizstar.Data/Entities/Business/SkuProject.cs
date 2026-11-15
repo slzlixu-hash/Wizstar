@@ -65,6 +65,38 @@ namespace Wizstar.Data.Entities.Business
            public string SelectionSource {get;set;}
 
            /// <summary>
+           /// Desc:绑定的工作流配方 ID（pipelines/*.yaml 的 pipeline_id）
+           /// Default:
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="pipeline_id", IsNullable = true, Length = 64)]
+           public string PipelineId {get;set;}
+
+           /// <summary>
+           /// Desc:当前所处工序节点编码
+           /// Default:
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="current_stage", IsNullable = true, Length = 64)]
+           public string CurrentStage {get;set;}
+
+           /// <summary>
+           /// Desc:当前工序状态: pending|running|waiting_human|completed|failed|blocked
+           /// Default:
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="stage_status", IsNullable = true, Length = 32)]
+           public string StageStatus {get;set;}
+
+           /// <summary>
+           /// Desc:当前工序备注（审核意见 / 阻塞原因）
+           /// Default:
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="stage_note", IsNullable = true, Length = 512)]
+           public string StageNote {get;set;}
+
+           /// <summary>
            /// Desc:scouted|sourced|creative_ready|pending_review|published|error|archived
            /// Default:scouted
            /// Nullable:False

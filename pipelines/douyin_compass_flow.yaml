@@ -1,0 +1,47 @@
+# 抖音罗盘爆款截流标准流
+#
+# 罗盘只提供「市场什么火」（标题/图片/价格带），没有货源，因此必须先过 1688 寻源再审核。
+# 引擎按 next 指针推进；type=hitl_gate 的节点会挂起等待人工审批，不会自动跳过。
+pipeline_id: douyin_compass_flow
+name: 抖音罗盘爆款截流标准流
+enabled: true
+trigger_source: douyin_compass
+description: 罗盘选品 → 1688 寻源核价 → 资格/毛利人工审核 → 改图生视频 → 正式上架
+stages:
+  - code: scout_ingest
+    name: 选品落库
+    type: auto
+    agent: selection
+    skill: compass_fetch_skill
+    next: sourcing_1688
+
+  - code: sourcing_1688
+    name: 1688 寻源比价
+    type: auto
+    agent: sourcing
+    skill: sourcing_1688_skill
+    next: qualification_gate
+
+  - code: qualification_gate
+    name: 资格 / 毛利审核
+    type: hitl_gate
+    panel: qualification
+    auto_rule: "margin_rate >= 0.35 && factory_score >= 4.5"
+    require_human: true
+    next: creative_media
+
+  - code: creative_media
+    name: 改主图 / 生视频
+    type: auto
+    agent: creative
+    skill: media_enrich_skill
+    panel: media_compare
+    next: publish_online
+
+  - code: publish_online
+    name: 正式上架
+    type: auto
+    agent: publisher
+    skill: shop_publish_skill
+    mode: direct_publish
+    next: null

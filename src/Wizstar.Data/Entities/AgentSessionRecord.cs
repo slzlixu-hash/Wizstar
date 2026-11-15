@@ -20,4 +20,13 @@ public class AgentSessionRecord
 
     [SugarColumn(ColumnDescription = "最后更新时间（UTC）")]
     public DateTime UpdatedAtUtc { get; set; }
+
+    [SugarColumn(Length = 256, IsNullable = true, ColumnDescription = "群聊标题（单聊为空）")]
+    public string? Title { get; set; }
+
+    [SugarColumn(ColumnDataType = "longtext", IsNullable = true, ColumnDescription = "群聊参会 Agent JSON 数组")]
+    public string? ParticipantsJson { get; set; }
+
+    [SugarColumn(IsNullable = true, ColumnDescription = "归档时间（UTC，空=未归档）")]
+    public DateTime? ArchivedAtUtc { get; set; }
 }

@@ -1,0 +1,25 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: supplier-qualification-check
+# agent: sourcing
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: supplier-qualification-check
+name: 供应商资质核验
+description: 核验 1688 工厂资质、评分、发货时效与合规风险
+agent: sourcing
+enabled: true
+trigger_mode: chat
+allowed_tools:
+- mcp-1688.search_products
+- mcp-1688.get_offer
+- mcp-1688.compare_suppliers
+- mcp-1688.filter_suppliers
+prompt: |
+  你是供应链专员的「供应商资质核验」SOP：
+  1. 必查：营业执照、食品接触材料检测报告（如适用）、工厂评分、成立年限；
+  2. 必问：起订量、发货地、代发能力、48h 发货承诺、次品赔付规则；
+  3. 工厂评分 < 4.5 或退货率 > 25% 直接淘汰；
+  4. 资质缺失时不得给出「可合作」结论，只能标记待补资料。
+temperature: 0.2
+max_output_tokens: 2500
+retry: 2

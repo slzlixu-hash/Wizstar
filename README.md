@@ -75,7 +75,23 @@ cd src/Wizstar.Api && dotnet run               # API（默认配置见 appsettin
 |---|---|
 | GET  /api/health | 健康（账本自检 / 模式 / Agent 数 / MCP 连接统计） |
 | GET  /api/agents | Agent 名册（人设由后端固化） |
-| POST /api/agents/{key}/chat | 对话（`Accept: text/event-stream` 走 SSE，否则 JSON） |
+| POST /api/agents/{key}/chat | 对话（`Accept: text/event-stream` 走 SSE，否则 JSON；`tags` 控制记忆规则注入，`skillKey` 按技能切片工具并注入 SOP） |
+| POST /api/agents/{key}/memory/learn | 自学习扫描近 7 天人工驳回 / 微信小店审核 / 高退货率 → 待确认候选 |
+| POST …/memory/{id}/confirm·reject·archive | 候选确认（可替换冲突规则 / 跨 Agent 同步）/ 驳回 / 归档 |
+| PUT  …/memory/{id} · /knowledge/{id} | 编辑记忆规则 / 知识条目（标题、标签、正文、启用状态） |
+| GET  /api/agents/{key}/memory/preview?tags= | Layer 3 注入白盒预览（命中规则 + 字符预算） |
+| GET  /api/agents/{key}/memory/scopes · /team · /team/overview | 场景模拟器选项 / 团队共享规则 / 各 Agent 注入覆盖率 |
+| POST …/memory/team/broadcast · PUT /team/{id} · POST /team/{id}/unshare | 一键广播全员 / 编辑共享规则与作用范围 / 下线共享 |
+| GET /api/skills?agent= · POST /api/skills · GET/PUT/DELETE /api/skills/{code} | 按 Agent 读取自己的 Skill / 新建 / 保存 / 删除（写 `skills/*.yaml` 并热加载） |
+| GET /api/skills/tools · POST /api/skills/{code}/toggle | 工具切片目录（内置 + MCP）/ 启停技能 |
+| GET /api/skills/{code}/yaml · POST /api/skills/preview·parse·import | YAML 导出 / 可视化↔YAML 双向转换 / 导入保存 |
+| GET /api/audit/logs?sinceHours=&severity=&agent=&pipelineId=&keyword= | 统一审计轨迹（工具调用 / HITL / 流水线动作） |
+| GET/POST /api/agents/groups | 群聊会诊会话列表 / 创建（`sourceConversationId` 可原地升级单聊） |
+| GET /api/agents/groups/{id} · PUT …/participants | 群会话读取 / 参会专员增删（复用 `wiz_agent_session`） |
+| POST /api/agents/groups/{id}/turn | 一轮会诊：被 @ 专员各发言 1 次 → 指挥官收敛 1 次 |
+| POST /api/agents/{key}/sessions/{id}/archive | 会话归档 / 恢复（`archived`，只隐藏不删历史） |
+| DELETE /api/agents/{key}/sessions/{id} | 删除会话（群聊连带清理内部专员通道） |
+| PUT /api/llm/bindings | 按 Agent 切换模型（写 `wiz_llm_agent_binding`，下一条消息生效） |
 | GET  /api/mcp/servers | MCP 服务快照（状态灯：connected / offline / error / disabled） |
 | POST /api/mcp/reconcile | 声明清单对账（只补缺 / 标记移除 / 指纹变更重握手） |
 | POST /api/mcp/servers/{id}/handshake | 单服务握手 + 拉取工具 |

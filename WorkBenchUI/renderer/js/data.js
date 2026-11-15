@@ -18,7 +18,7 @@
   WB.data = {
     /* 产品元信息（非业务数据）+ 运行时状态（由数据层填充） */
     app: {
-      brand: '商品汇商',
+      brand: '智多星',
       product: 'AgentWorkBench',
       platform: '智多星电商智能体协同平台',
       tagline: '多智能体协同 · 驱动矩阵电商全自动闭环',

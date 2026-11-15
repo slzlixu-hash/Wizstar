@@ -28,6 +28,26 @@
   user-select: none;
 }
 
+.titlebar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.titlebar-status .status-dot {
+  flex: none;
+}
+
+.titlebar-endpoint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
 .titlebar-brand {
   display: flex;
   align-items: center;
@@ -122,9 +142,16 @@
   height: 34px;
   flex: none;
   border-radius: 10px;
-  background: linear-gradient(145deg, #1d4ed8, #3b82f6 45%, #22d3ee);
-  box-shadow: 0 6px 18px -6px rgba(59, 130, 246, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+  background: transparent;
   color: #fff;
+}
+
+.brand-logo-img {
+  width: 34px;
+  height: 34px;
+  display: block;
+  border-radius: 10px;
 }
 
 .brand-name {
@@ -239,16 +266,6 @@
   color: var(--text-3);
 }
 
-.sidebar-version {
-  margin-top: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10.5px;
-  color: var(--text-3);
-  letter-spacing: 0.04em;
-}
-
 /* ------------------------------ 主区域 ------------------------------ */
 .main {
   display: flex;
@@ -311,12 +328,6 @@
 }
 
 /* 顶部用户区（齿轮 / 通知 / 头像） */
-.user-cluster {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .icon-btn {
   position: relative;
   display: grid;
@@ -348,31 +359,144 @@
   box-shadow: 0 0 8px rgba(251, 113, 133, 0.9);
 }
 
-.user-pill {
+.user-slot {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---------- 右上角登录用户菜单 ---------- */
+.user-menu {
+  position: relative;
+}
+
+.user-menu__trigger {
   display: flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   height: 36px;
-  padding: 0 6px 0 4px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: rgba(148, 163, 184, 0.05);
+  padding: 0 10px 0 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: all var(--dur);
+  transition: background 0.15s var(--ease);
 }
 
-.user-pill:hover {
-  border-color: var(--line-strong);
+.user-menu__trigger:hover,
+.user-menu__trigger[aria-expanded="true"] {
   background: rgba(148, 163, 184, 0.1);
 }
 
-.user-pill .user-name {
-  font-size: 12.5px;
-  color: var(--text-1);
-  max-width: 84px;
+.user-menu__avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+}
+
+.user-menu__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-menu__initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dff6ff;
+}
+
+.user-menu__initial[hidden] {
+  display: none;
+}
+
+.user-menu__name {
+  max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.user-menu__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 60;
+  width: 196px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(178deg, #131d33, #0b1220);
+  box-shadow: var(--shadow-pop);
+  animation: wb-fade-up 0.18s var(--ease) both;
+}
+
+.user-menu__pop[hidden] {
+  display: none;
+}
+
+.user-menu__head {
+  padding: 8px 10px 9px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.user-menu__head-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.user-menu__head-role {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.user-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.user-menu__item:hover {
+  background: rgba(124, 160, 214, 0.1);
+  color: var(--text-1);
+}
+
+.user-menu__item.is-danger {
+  color: #fb7185;
+}
+
+.user-menu__item.is-danger:hover {
+  background: rgba(251, 113, 133, 0.1);
+  color: #fda4af;
 }
 
 /* ============================== 按钮 ============================== */
@@ -1558,4 +1682,38 @@
 @media (max-width: 1360px) {
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .split-main { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- 侧边栏底部登录用户（固定位置，所有页面共用） ---------- */
+.sidebar-user {
+  /* 抵消 .sidebar-foot 的左右内边距：整条铺满侧栏宽度；分隔线由 .sidebar-foot 提供 */
+  margin: 0 -18px;
+  padding: 0;
+}
+
+.sidebar-user .user-menu__trigger {
+  padding: 0 18px;
+}
+
+.sidebar-user .user-menu {
+  width: 100%;
+}
+
+.sidebar-user .user-menu__trigger {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.sidebar-user .user-menu__name {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+/* 底部弹出：向上展开，避免超出视口 */
+.sidebar-user .user-menu__pop {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: auto;
 }

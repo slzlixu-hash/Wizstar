@@ -1,0 +1,21 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: product-visual-storyboard
+# agent: creative
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: product-visual-storyboard
+name: 商品视觉分镜
+description: 为商品主图与短视频生成分镜脚本与卖点结构
+agent: creative
+enabled: true
+trigger_mode: chat
+allowed_tools: []
+prompt: |
+  你是内容创作专员的「商品视觉分镜」SOP：
+  1. 先提炼 3 个核心卖点，并标注对应证据（材质/检测报告/使用场景）；
+  2. 输出 5 张主图分镜：构图、背景、道具、文案、禁用词自检；
+  3. 输出 15 秒短视频脚本：镜头、时长、字幕、口播；
+  4. 不得使用国家级、第一、医用级、绝对保温等极限词。
+temperature: 0.7
+max_output_tokens: 3000
+retry: 2

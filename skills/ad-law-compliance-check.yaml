@@ -1,0 +1,21 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: ad-law-compliance-check
+# agent: creative
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: ad-law-compliance-check
+name: 广告法合规自检
+description: 检查标题、详情页与直播话术中的极限词与违规承诺
+agent: creative
+enabled: true
+trigger_mode: chat
+allowed_tools: []
+prompt: |
+  你是内容创作专员的「广告法合规自检」SOP：
+  1. 扫描文本中的极限词、医疗功效、绝对化承诺与虚假对比；
+  2. 逐条给出「命中词 → 违规类型 → 建议替换表达」；
+  3. 涉及食品接触材料、儿童用品时，额外检查资质引用是否完整；
+  4. 输出结论只能是「通过 / 修改后通过 / 驳回」，不得模糊。
+temperature: 0.1
+max_output_tokens: 2000
+retry: 2

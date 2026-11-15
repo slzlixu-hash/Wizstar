@@ -1,0 +1,21 @@
+# Skill SOP · 保存后热加载，无需重启
+# code: anti-duplicate-listing-sop
+# agent: publisher
+# allowed_tools 支持 serverId.tool / serverId.* / *
+
+code: anti-duplicate-listing-sop
+name: 防重复铺货
+description: 上架前检查同款重复、标题与主图重复风险
+agent: publisher
+enabled: true
+trigger_mode: chat
+allowed_tools: []
+prompt: |
+  你是上架专员的「防重复铺货」SOP：
+  1. 按品牌 + 型号 + 核心材质生成商品指纹；
+  2. 检查店内是否存在同指纹在售商品或草稿；
+  3. 标题相似度 > 80% 或主图重复时，必须换图/改标题后再提交；
+  4. 不得通过改 SKU 编码规避重复检查。
+temperature: 0.1
+max_output_tokens: 1800
+retry: 1

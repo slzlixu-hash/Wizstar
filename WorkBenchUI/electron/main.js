@@ -24,6 +24,8 @@ const APP_ICON = path.join(RENDERER_DIR, 'assets', 'app-icon.png');
 let loginWindow = null;
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+/** @type {BrowserWindow | null} */
+let commanderWindow = null;
 /** 当前登录用户（由 /api/auth/login 返回；令牌只在主进程内存里） */
 let currentUser = null;
 
@@ -56,7 +58,7 @@ function createLoginWindow() {
     minHeight: 620,
     backgroundColor: '#05080f',
     title: 'AgentWorkBench · 登录',
-    ...(app.isPackaged ? { icon: APP_ICON } : {}),
+    icon: APP_ICON,
   });
 
   loginWindow.loadFile(path.join(RENDERER_DIR, 'login.html'));
@@ -86,7 +88,7 @@ function createMainWindow() {
     minWidth: 1200,
     minHeight: 760,
     title: 'AgentWorkBench · 运营指挥工作台',
-    ...(app.isPackaged ? { icon: APP_ICON } : {}),
+    icon: APP_ICON,
   });
 
   mainWindow.loadFile(path.join(RENDERER_DIR, 'index.html'));
@@ -106,6 +108,48 @@ function createMainWindow() {
   });
 
   return mainWindow;
+}
+
+/**
+ * 指挥官管理界面：独立窗口铺满整个界面（不套主壳侧边栏/页头）。
+ * 打开时隐藏主窗口；关闭后主窗口自动恢复。
+ */
+function createCommanderWindow() {
+  if (commanderWindow) {
+    commanderWindow.show();
+    commanderWindow.focus();
+    return commanderWindow;
+  }
+
+  commanderWindow = new BrowserWindow({
+    ...BASE_WINDOW_OPTIONS,
+    width: 1680,
+    height: 980,
+    minWidth: 1200,
+    minHeight: 760,
+    title: 'AgentWorkBench · 指挥官管理界面',
+    icon: APP_ICON,
+  });
+
+  commanderWindow.loadFile(path.join(RENDERER_DIR, 'commander.html'));
+
+  commanderWindow.once('ready-to-show', () => {
+    if (commanderWindow) {
+      commanderWindow.show();
+      commanderWindow.focus();
+    }
+  });
+
+  commanderWindow.on('closed', () => {
+    commanderWindow = null;
+    // 返回主界面：指挥官窗口关闭后恢复主窗口
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  return commanderWindow;
 }
 
 function windowFromEvent(event) {
@@ -153,6 +197,12 @@ function showLogin(message) {
     };
     if (win.webContents.isLoading()) win.webContents.once('did-finish-load', notify);
     else notify();
+  }
+
+  if (commanderWindow) {
+    const closingCommander = commanderWindow;
+    commanderWindow = null;
+    closingCommander.close();
   }
 
   if (mainWindow) {
@@ -228,6 +278,34 @@ ipcMain.handle('auth:logout', async () => {
   }
   showLogin(null);
   return { ok: true };
+});
+
+/** 切换用户：回登录窗口并提示（保留已记住的账号密码，方便直接登录另一账号）。 */
+ipcMain.handle('auth:switch', () => {
+  showLogin('请使用其他账号登录');
+  return { ok: true };
+});
+
+/** 打开指挥官管理界面（独立窗口，铺满整个界面；主窗口先隐藏）。 */
+ipcMain.on('win:open-commander', () => {
+  createCommanderWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+});
+
+/** 指挥官窗口请求主窗口跳转（如「模型配置」→ 系统设置）。 */
+ipcMain.on('main:navigate', (_event, hash) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('main:navigate', String(hash || '#/dashboard'));
+});
+
+/** 退出系统：直接关闭应用。 */
+ipcMain.on('app:quit', () => {
+  app.quit();
 });
 
 /** 当前登录用户（渲染层用于页脚展示，不含令牌）。 */

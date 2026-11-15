@@ -20,7 +20,7 @@ namespace Wizstar.Data.Entities.Business
            /// Desc:
            /// Default:
            /// Nullable:False
-           /// </summary>           
+           /// </summary>
            [SugarColumn(IsPrimaryKey=true,IsIdentity=true,ColumnName="id")]
            public long Id {get;set;}
 
@@ -29,7 +29,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="agent_key")]           
+           [SugarColumn(ColumnName="agent_key")]
            public string AgentKey {get;set;}
 
            /// <summary>
@@ -37,7 +37,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="subject")]           
+           [SugarColumn(ColumnName="subject")]
            public string Subject {get;set;}
 
            /// <summary>
@@ -45,7 +45,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(ColumnName="metric")]           
+           [SugarColumn(ColumnName="metric")]
            public string Metric {get;set;}
 
            /// <summary>
@@ -53,7 +53,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="value_text")]           
+           [SugarColumn(ColumnName="value_text")]
            public string ValueText {get;set;}
 
            /// <summary>
@@ -61,7 +61,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:0.90
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="confidence")]           
+           [SugarColumn(ColumnName="confidence")]
            public decimal Confidence {get;set;}
 
            /// <summary>
@@ -69,7 +69,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:pending
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="status")]           
+           [SugarColumn(ColumnName="status")]
            public string Status {get;set;}
 
            /// <summary>
@@ -77,7 +77,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:manual
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="source_type")]           
+           [SugarColumn(ColumnName="source_type")]
            public string SourceType {get;set;}
 
            /// <summary>
@@ -85,7 +85,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(ColumnName="source_ref")]           
+           [SugarColumn(ColumnName="source_ref")]
            public string SourceRef {get;set;}
 
            /// <summary>
@@ -93,7 +93,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(ColumnName="verified_by")]           
+           [SugarColumn(ColumnName="verified_by")]
            public string VerifiedBy {get;set;}
 
            /// <summary>
@@ -101,15 +101,50 @@ namespace Wizstar.Data.Entities.Business
            /// Default:
            /// Nullable:True
            /// </summary>
-           [SugarColumn(ColumnName="verified_at")]           
+           [SugarColumn(ColumnName="verified_at")]
            public DateTime? VerifiedAt {get;set;}
+
+           /// <summary>
+           /// Desc:适用标签（如 #保温杯 #冬季 / #全局）
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="tags", IsNullable=true, Length=256)]
+           public string Tags {get;set;}
+
+           /// <summary>
+           /// Desc:有效期截止（空=永久）
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="expires_at", IsNullable=true)]
+           public DateTime? ExpiresAt {get;set;}
+
+           /// <summary>
+           /// Desc:被注入 System Prompt 的累计次数
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="hit_count", IsNullable=true)]
+           public int? HitCount {get;set;}
+
+           /// <summary>
+           /// Desc:归纳样本量（款/单）
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="sample_count", IsNullable=true)]
+           public int? SampleCount {get;set;}
+
+           /// <summary>
+           /// Desc:同步到的 Agent（逗号分隔，如 scout,sourcing）
+           /// Nullable:True
+           /// </summary>
+           [SugarColumn(ColumnName="sync_agent_keys", IsNullable=true, Length=256)]
+           public string SyncAgentKeys {get;set;}
 
            /// <summary>
            /// Desc:
            /// Default:CURRENT_TIMESTAMP
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="created_at")]           
+           [SugarColumn(ColumnName="created_at")]
            public DateTime CreatedAt {get;set;}
 
            /// <summary>
@@ -117,7 +152,7 @@ namespace Wizstar.Data.Entities.Business
            /// Default:CURRENT_TIMESTAMP
            /// Nullable:False
            /// </summary>
-           [SugarColumn(ColumnName="updated_at")]           
+           [SugarColumn(ColumnName="updated_at")]
            public DateTime UpdatedAt {get;set;}
 
     }
