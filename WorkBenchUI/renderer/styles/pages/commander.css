@@ -2172,7 +2172,8 @@ body.cmd-standalone-body {
   grid-template-columns: 16px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
-  padding: 12px;
+  min-height: 70px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(124, 160, 214, 0.04);
@@ -2258,39 +2259,106 @@ body.cmd-standalone-body {
 }
 
 .wf-gate-row {
+  grid-column: 2 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(251, 191, 36, 0.18);
 }
 
 .wf-gate-rule {
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
+  line-height: 1.5;
   color: #fcd34d;
 }
 
 .wf-gate-switch {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+  font-size: 10.5px;
   color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* 工序卡片内的紧凑开关：比全局开关小一号，靠右对齐 */
+.wf-gate-switch .switch {
+  gap: 6px;
+  font-size: 10.5px;
+}
+
+.wf-gate-switch .switch .track {
+  width: 30px;
+  height: 17px;
+}
+
+.wf-gate-switch .switch .track::after {
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+}
+
+.wf-gate-switch .switch input:checked + .track::after {
+  left: 15px;
+}
+
+.wf-stage-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex: none;
 }
 
 .wf-stage-edit {
-  padding: 0;
-  border: 0;
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(34, 211, 238, 0.32);
+  border-radius: 7px;
+  background: rgba(34, 211, 238, 0.06);
   color: #67e8f9;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 10.5px;
   cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .wf-stage-edit:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(34, 211, 238, 0.13);
+  color: #a5f3fc;
+  text-decoration: none;
+}
+
+.wf-stage-del {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  border-radius: 7px;
+  background: rgba(251, 113, 133, 0.05);
+  color: #fb7185;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.wf-stage-del:hover {
+  border-color: rgba(251, 113, 133, 0.62);
+  background: rgba(251, 113, 133, 0.13);
+  color: #fda4af;
 }
 
 .wf-foot {
@@ -4579,4 +4647,106 @@ body.cmd-standalone-body {
   .cmd-skill-grid3 {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ---------- 任务复盘弹框 ---------- */
+.cmd-retro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cmd-retro-kv {
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 6px 10px;
+  font-size: 11.5px;
+}
+
+.cmd-retro-title {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmd-retro-title span {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.cmd-retro-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cmd-retro-stage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(124, 160, 214, 0.03);
+}
+
+.cmd-retro-stage-no {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(124, 160, 214, 0.12);
+  color: var(--text-2);
+  font-family: var(--font-num);
+  font-size: 9.5px;
+}
+
+.cmd-retro-stage-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-retro-audits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.cmd-retro-audit {
+  display: grid;
+  grid-template-columns: 92px 150px auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(124, 160, 214, 0.03);
+  color: var(--text-3);
+  font-size: 9.5px;
+}
+
+.cmd-retro-audit .mono {
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-retro-audit-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

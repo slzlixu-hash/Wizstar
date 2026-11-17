@@ -20,7 +20,7 @@
   const pages = (WB.pages = WB.pages || {});
 
   const PANELS = [
-    { id: 'workbench', label: '工作台', icon: 'home' },
+    { id: 'workbench', label: '运行台', icon: 'home' },
     { id: 'chat', label: 'Chat', icon: 'inbox' },
     { id: 'pipelines', label: '工作流管理', icon: 'layers' },
     { id: 'memory', label: '记忆体', icon: 'database' },
@@ -33,8 +33,10 @@
     { value: 'all', label: '全部' },
     { value: 'active', label: '进行中' },
     { value: 'waiting', label: '待人工确认' },
+    { value: 'paused', label: '已暂停' },
     { value: 'done', label: '已完成' },
     { value: 'cancelled', label: '已终止' },
+    { value: 'archived', label: '已归档' },
     { value: 'idle', label: '待推进' },
   ];
 
@@ -151,6 +153,7 @@
     pending: { label: '待执行', tone: 'slate', dot: 'offline' },
     running: { label: '执行中', tone: 'cyan', dot: 'busy' },
     waiting_human: { label: '待人工审核', tone: 'amber', dot: 'amber' },
+    paused: { label: '已暂停', tone: 'amber', dot: 'amber' },
     completed: { label: '已完成', tone: 'green', dot: 'online' },
     failed: { label: '失败', tone: 'rose', dot: 'amber' },
     blocked: { label: '待接线', tone: 'slate', dot: 'offline' },
@@ -225,7 +228,11 @@
     const status = String(task.stageStatus || '').toLowerCase();
     const index = Number(task.stageIndex) || 0;
     const total = Number(task.stageTotal) || 0;
+    if (String(task.rawStatus || '').toLowerCase() === 'archived' || task.status === '已归档') {
+      return { key: 'archived', label: '已归档', tone: 'slate', dot: 'offline', index, total };
+    }
     if (status === 'cancelled') return { key: 'cancelled', label: '已终止', tone: 'rose', dot: 'offline', index, total };
+    if (status === 'paused') return { key: 'paused', label: '已暂停', tone: 'amber', dot: 'amber', index, total };
     if (status === 'completed' && (total === 0 || index >= total)) {
       return { key: 'done', label: '已完成', tone: 'green', dot: 'online', index, total };
     }
@@ -250,12 +257,18 @@
     const kw = f.keyword.trim().toLowerCase();
 
     return state.tasks.filter((t) => {
-      if (windowMs) {
+      if (windowMs && f.status !== 'archived') {
         const at = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
         if (!at || now - at > windowMs) return false;
       }
       if (f.pipeline !== 'all' && String(t.pipelineId || '') !== f.pipeline) return false;
-      if (f.status !== 'all' && taskState(t).key !== f.status) return false;
+      const st = taskState(t);
+      if (f.status === 'all') {
+        // 归档是逻辑软删除：默认列表不展示；通过「已归档」筛选追溯。
+        if (st.key === 'archived') return false;
+      } else if (st.key !== f.status) {
+        return false;
+      }
       if (kw) {
         const hay = [t.id, t.name, t.pipelineName, t.currentStageName].join(' ').toLowerCase();
         if (hay.indexOf(kw) === -1) return false;
@@ -365,7 +378,7 @@
   /* ------------------------------ 渲染：左轨 ------------------------------ */
 
   function railCount(id) {
-    if (id === 'workbench') return state.tasks.length;
+    if (id === 'workbench') return state.tasks.filter((t) => taskState(t).key !== 'archived').length;
     if (id === 'pipelines') return state.pipelines.length;
     if (id === 'memory') return state.memory ? (state.memory.memories || []).length + (state.memory.knowledge || []).length : 0;
     if (id === 'skills') {
@@ -378,7 +391,7 @@
 
   function activeTasks() {
     return state.tasks
-      .filter((t) => ['active', 'waiting', 'idle'].includes(taskState(t).key))
+      .filter((t) => ['active', 'waiting', 'idle', 'paused'].includes(taskState(t).key))
       .slice(0, 5);
   }
 
@@ -416,23 +429,26 @@
 
   function taskRowHtml(task) {
     const st = taskState(task);
-    const actions = [`<button type="button" class="cmd-link" data-cmd-detail="${esc(task.id)}">详情</button>`];
-    if (st.key === 'waiting') {
-      actions.push(`<button type="button" class="cmd-link" data-cmd-detail="${esc(task.id)}">审核</button>`);
-    } else if (st.key !== 'done' && st.key !== 'cancelled') {
-      actions.push(`<button type="button" class="cmd-link" data-cmd-advance="${esc(task.id)}">推进</button>`);
-    }
-    if (st.key !== 'done' && st.key !== 'cancelled') {
-      actions.push(`<button type="button" class="cmd-link is-danger" data-cmd-cancel="${esc(task.id)}">终止</button>`);
-    }
-    if (st.key === 'cancelled') {
-      actions.push(`<button type="button" class="cmd-link" data-cmd-detail="${esc(task.id)}">复盘</button>`);
+    const id = esc(task.id);
+    const actions = [`<button type="button" class="cmd-link" data-cmd-detail="${id}">详情</button>`];
+    if (st.key === 'archived') {
+      actions.push(`<button type="button" class="cmd-link" data-cmd-row-retro="${id}">复盘</button>`);
+      actions.push(`<button type="button" class="cmd-link is-danger" data-cmd-row-delete="${id}">删除</button>`);
+    } else if (st.key === 'done' || st.key === 'cancelled') {
+      actions.push(`<button type="button" class="cmd-link" data-cmd-row-retro="${id}">复盘</button>`);
+      actions.push(`<button type="button" class="cmd-link" data-cmd-row-archive="${id}">归档</button>`);
+    } else if (st.key === 'paused') {
+      actions.push(`<button type="button" class="cmd-link" data-cmd-row-resume="${id}">继续</button>`);
+      actions.push(`<button type="button" class="cmd-link is-danger" data-cmd-row-cancel="${id}">终止</button>`);
+    } else {
+      actions.push(`<button type="button" class="cmd-link" data-cmd-row-pause="${id}">暂停</button>`);
+      actions.push(`<button type="button" class="cmd-link is-danger" data-cmd-row-cancel="${id}">终止</button>`);
     }
 
-    return `<tr data-cmd-task="${esc(task.id)}" title="双击进入任务执行详情">
+    return `<tr data-cmd-task="${id}" title="双击进入任务执行详情">
       <td>
         <div class="cmd-task-name">${esc(task.name)}</div>
-        <div class="cmd-task-id mono">${esc(task.id)}</div>
+        <div class="cmd-task-id mono">${id}</div>
       </td>
       <td>${esc(task.pipelineName || '未匹配配方')}</td>
       <td class="mono">${esc(fmtTime(task.updatedAt, true))}</td>
@@ -510,6 +526,9 @@
       buttons.push(`<button type="button" class="btn btn-danger btn-sm" data-cmd-reject>驳回</button>`);
     } else if (status === 'cancelled') {
       buttons.push(`<span class="tiny dim">任务已终止，如需重做请返回列表新建任务。</span>`);
+    } else if (status === 'paused') {
+      buttons.push(`<button type="button" class="btn btn-primary btn-sm" data-cmd-resume>继续任务</button>`);
+      buttons.push(`<span class="tiny dim">已暂停：后续工序停止分派，继续后从当前工序恢复。</span>`);
     } else if (status === 'completed') {
       if (!d.completed) {
         buttons.push(`<button type="button" class="btn btn-primary btn-sm" data-cmd-advance>推进下一站</button>`);
@@ -686,6 +705,12 @@
     } else if (kind === 'reject') {
       res = await request('POST', base + '/approve', { approved: false, note });
       okMessage = '已驳回';
+    } else if (kind === 'pause') {
+      res = await request('POST', base + '/pause', { note: note || '指挥官界面暂停任务' });
+      okMessage = '任务已暂停';
+    } else if (kind === 'resume') {
+      res = await request('POST', base + '/resume', { note: note || '指挥官界面恢复任务' });
+      okMessage = '任务已恢复';
     } else if (kind === 'cancel') {
       const ok = await ui.confirm({
         title: '停止任务？',
@@ -707,6 +732,134 @@
     }
     toast(okMessage, 'success');
     await refreshDetail();
+  }
+
+  async function listTaskAction(kind, projectNo) {
+    const task = state.tasks.find((t) => t.id === projectNo);
+    if (!task) return;
+    const base = '/api/business/products/' + encodeURIComponent(projectNo) + '/pipeline';
+
+    if (kind === 'cancel') {
+      const ok = await ui.confirm({
+        title: '终止任务（安全刹车）？',
+        desc: '将向编排引擎发出取消信号，熔断当前工作流，中断后续工序分派并销毁下游排队中的工具调用句柄；任务进入终态「已终止」，不可再推进。',
+        ok: '终止任务',
+        cancel: '取消',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
+
+    const res = await request('POST', base + '/' + kind, {
+      note: kind === 'pause'
+        ? '指挥官界面暂停任务'
+        : kind === 'resume'
+          ? '指挥官界面恢复任务'
+          : '指挥官界面安全终止任务',
+    });
+    if (!res.ok) {
+      toast((kind === 'pause' ? '暂停失败：' : kind === 'resume' ? '恢复失败：' : '终止失败：') + (res.error || '服务未连接'), 'warn');
+      return;
+    }
+    toast(kind === 'pause' ? '任务已暂停，后续工序已停止分派' : kind === 'resume' ? '任务已恢复' : '任务已终止（终态）', 'success');
+    await loadAll();
+    paint();
+  }
+
+  async function archiveTask(projectNo) {
+    const task = state.tasks.find((t) => t.id === projectNo);
+    if (!task) return;
+    const ok = await ui.confirm({
+      title: '归档任务？',
+      desc: '归档是逻辑软删除：只更新 status = archived，不删除任何历史。任务会从默认列表隐藏，可在顶部「状态筛选 → 已归档」中追溯。',
+      ok: '归档',
+      cancel: '取消',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    const res = await request('POST', '/api/business/products/' + encodeURIComponent(projectNo) + '/pipeline/archive', {});
+    if (!res.ok) {
+      toast('归档失败：' + (res.error || '服务未连接'), 'warn');
+      return;
+    }
+    toast('任务已归档，可在「已归档」筛选中查看', 'success');
+    await loadAll();
+    paint();
+  }
+
+  async function deleteArchivedTask(projectNo) {
+    const task = state.tasks.find((t) => t.id === projectNo);
+    if (!task) return;
+    const ok = await ui.confirm({
+      title: '彻底删除归档任务？',
+      desc: '将永久删除该任务及其规格 / 上架 / 素材 / 寻源记录，不可恢复；审计轨迹会保留。若存在订单明细，系统会拒绝删除。',
+      ok: '彻底删除',
+      cancel: '取消',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    const res = await request('DELETE', '/api/business/products/' + encodeURIComponent(projectNo) + '/pipeline', null);
+    if (!res.ok) {
+      toast('删除失败：' + (res.error || '服务未连接'), 'warn');
+      return;
+    }
+    toast('归档任务已彻底删除', 'success');
+    await loadAll();
+    paint();
+  }
+
+  async function openRetro(projectNo) {
+    const task = state.tasks.find((t) => t.id === projectNo) || { id: projectNo, name: projectNo };
+    const [pipeRes, auditRes] = await Promise.all([
+      request('GET', '/api/business/products/' + encodeURIComponent(projectNo) + '/pipeline'),
+      request('GET', '/api/audit/logs?keyword=' + encodeURIComponent(projectNo) + '&limit=30'),
+    ]);
+    if (!pipeRes.ok || !pipeRes.data) {
+      toast('复盘读取失败：' + (pipeRes.error || '服务未连接'), 'warn');
+      return;
+    }
+    const d = pipeRes.data;
+    const st = taskState(task);
+    const stages = Array.isArray(d.stages) ? d.stages : [];
+    const audits = auditRes.ok && Array.isArray(auditRes.data) ? auditRes.data : [];
+    const progress = d.stageTotal ? `${d.stageIndex}/${d.stageTotal}` : '—';
+    const meta = [
+      ['任务编号', `<span class="mono">${esc(d.projectNo || projectNo)}</span>`],
+      ['工作流', esc(d.pipelineName || '未匹配配方')],
+      ['终态', ui.badge(st.label, { tone: st.tone, dot: true })],
+      ['工序进度', esc(progress)],
+      ['来源', esc(d.triggerSource || '—')],
+      ['说明', esc(d.stageNote || '—')],
+    ];
+    const stageHtml = stages.map((s, i) => {
+      const sm = stageMeta(s.status);
+      return `<div class="cmd-retro-stage">
+        <span class="cmd-retro-stage-no">${i + 1}</span>
+        <span class="cmd-retro-stage-name">${esc(s.name || s.code)}</span>
+        ${ui.badge(sm.label, { tone: sm.tone, dot: true })}
+      </div>`;
+    }).join('');
+    const auditHtml = audits.length
+      ? audits.slice(0, 12).map((a) => `<div class="cmd-retro-audit">
+          <span class="mono">${esc(fmtTime(a.at, true))}</span>
+          <span class="mono">${esc(a.action || '—')}</span>
+          ${ui.badge(a.statusLabel || a.status || '—', { tone: a.statusTone || 'slate', dot: true })}
+          <span class="cmd-retro-audit-text">${esc(String(a.argumentsJson || '').slice(0, 160))}</span>
+        </div>`).join('')
+      : '<div class="cmd-empty">暂无该任务的审计记录。</div>';
+
+    ui.modal({
+      title: '任务复盘 · ' + esc(task.name || d.projectNo),
+      desc: '复盘基于真实工序状态与审计轨迹生成；归档任务同样可追溯。',
+      body: `<div class="cmd-retro">
+        ${ui.kv(meta, { cls: 'cmd-retro-kv' })}
+        <div class="cmd-retro-title">工序轨迹</div>
+        <div class="cmd-retro-stages">${stageHtml || '<div class="cmd-empty">暂无工序。</div>'}</div>
+        <div class="cmd-retro-title">审计记录 <span>${audits.length} 条</span></div>
+        <div class="cmd-retro-audits">${auditHtml}</div>
+      </div>`,
+      actions: ui.btn({ label: '关闭', tone: 'ghost', attrs: 'data-modal-close' }),
+    });
   }
 
   /* ------------------------------ 渲染：其它分区 ------------------------------ */
@@ -1153,19 +1306,23 @@
           <span class="wf-stage-code mono">${esc(stage.code)}</span>
           ${isGate ? ui.badge('人机闸口 HITL', { tone: 'amber', dot: true }) : ui.badge('自动节点', { tone: 'slate' })}
         </div>
-        ${
-          isGate
-            ? `<div class="wf-gate-row">
-                <span class="wf-gate-rule">规则: ${esc(stage.autoRule || '未声明自动初筛规则')}</span>
-                <label class="wf-gate-switch" title="关闭后符合规则的任务将自动放行">
-                  <span>需人工确认</span>
-                  ${ui.switchControl({ checked: stage.requireHuman !== false, attrs: `data-wf-gate="${index}"` })}
-                </label>
-              </div>`
-            : `<div class="wf-stage-meta">${esc(meta)}</div>`
-        }
+        ${isGate ? '' : `<div class="wf-stage-meta">${esc(meta)}</div>`}
       </div>
-      <button type="button" class="wf-stage-edit" data-wf-edit="${index}">配置</button>
+      <div class="wf-stage-actions">
+        <button type="button" class="wf-stage-edit" data-wf-edit="${index}">配置</button>
+        <button type="button" class="wf-stage-del" data-wf-stage-del="${index}" title="删除该工序节点" draggable="false">${ui.icon('trash', 13)}</button>
+      </div>
+      ${
+        isGate
+          ? `<div class="wf-gate-row">
+              <span class="wf-gate-rule">规则: ${esc(stage.autoRule || '未声明自动初筛规则')}</span>
+              <div class="wf-gate-switch" title="关闭后符合规则的任务将自动放行">
+                <span>需人工确认</span>
+                ${ui.switchControl({ checked: stage.requireHuman !== false, attrs: `data-wf-gate="${index}"` })}
+              </div>
+            </div>`
+          : ''
+      }
     </div>`;
   }
 
@@ -4080,7 +4237,7 @@
     }
     const candidates = (state.tasks || []).filter((t) => {
       const st = taskState(t);
-      return st.key !== 'done' && st.key !== 'cancelled';
+      return !['done', 'cancelled', 'archived', 'paused'].includes(st.key);
     });
     if (!candidates.length) {
       toast('没有可推进的任务，请先新建任务', 'warn');
@@ -5207,6 +5364,44 @@
           openTask(detail.dataset.cmdDetail);
           return;
         }
+        const rowPause = e.target.closest('[data-cmd-row-pause]');
+        if (rowPause) {
+          await listTaskAction('pause', rowPause.dataset.cmdRowPause);
+          return;
+        }
+        const rowResume = e.target.closest('[data-cmd-row-resume]');
+        if (rowResume) {
+          await listTaskAction('resume', rowResume.dataset.cmdRowResume);
+          return;
+        }
+        const rowCancel = e.target.closest('[data-cmd-row-cancel]');
+        if (rowCancel) {
+          await listTaskAction('cancel', rowCancel.dataset.cmdRowCancel);
+          return;
+        }
+        const rowArchive = e.target.closest('[data-cmd-row-archive]');
+        if (rowArchive) {
+          await archiveTask(rowArchive.dataset.cmdRowArchive);
+          return;
+        }
+        const rowRetro = e.target.closest('[data-cmd-row-retro]');
+        if (rowRetro) {
+          await openRetro(rowRetro.dataset.cmdRowRetro);
+          return;
+        }
+        const rowDelete = e.target.closest('[data-cmd-row-delete]');
+        if (rowDelete) {
+          await deleteArchivedTask(rowDelete.dataset.cmdRowDelete);
+          return;
+        }
+        if (e.target.closest('[data-cmd-resume]')) {
+          taskAction('resume');
+          return;
+        }
+        if (e.target.closest('[data-cmd-pause]')) {
+          taskAction('pause');
+          return;
+        }
         if (e.target.closest('[data-cmd-task-back]')) {
           backToList();
           return;
@@ -5346,6 +5541,24 @@
         }
         if (e.target.closest('[data-wf-insert]')) {
           openStageModal('insert', -1);
+          return;
+        }
+        const wfStageDel = e.target.closest('[data-wf-stage-del]');
+        if (wfStageDel && state.wfDraft) {
+          const index = Number(wfStageDel.dataset.wfStageDel);
+          const stage = (state.wfDraft.stages || [])[index];
+          if (!stage) return;
+          const ok = await ui.confirm({
+            title: '删除工序节点？',
+            desc: `将从当前配方草稿移除「${stage.name || stage.code}」，点「保存工作流」后写入 YAML；取消则不影响配方。`,
+            ok: '删除节点',
+            cancel: '取消',
+            tone: 'danger',
+          });
+          if (!ok) return;
+          state.wfDraft.stages.splice(index, 1);
+          wfDirty(true);
+          paint();
           return;
         }
         const wfEdit = e.target.closest('[data-wf-edit]');

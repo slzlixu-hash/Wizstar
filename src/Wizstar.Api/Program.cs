@@ -155,6 +155,7 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton<IPipelineProjectStore, SqlPipelineProjectStore>();
 builder.Services.AddSingleton<PipelineStore>();
+builder.Services.AddSingleton<PipelineRunControl>();
 builder.Services.AddSingleton<PipelineOrchestrator>();
 
 // ── Skill SOP：skills/*.yaml 声明式目录，保存后热加载并立即影响下一次 Agent 运行 ──

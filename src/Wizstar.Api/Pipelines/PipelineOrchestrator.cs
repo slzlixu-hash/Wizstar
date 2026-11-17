@@ -117,9 +117,11 @@ public sealed class PipelineOrchestrator(
     IPipelineProjectStore store,
     PipelineCatalog catalog,
     IEnumerable<IPipelineStageExecutor> executors,
-    ILogger<PipelineOrchestrator> logger)
+    ILogger<PipelineOrchestrator> logger,
+    PipelineRunControl? runControl = null)
 {
     private const string DoneNote = "流水线已完成";
+    private readonly PipelineRunControl _runControl = runControl ?? new PipelineRunControl();
 
     public PipelineStateView GetState(string projectNo)
     {
@@ -153,7 +155,13 @@ public sealed class PipelineOrchestrator(
         {
             throw ApiException.Validation("任务已终止，无法继续推进；请新建任务后重试");
         }
+        if (status == PipelineStageStatus.Paused)
+        {
+            throw ApiException.Validation("任务已暂停，请先恢复后再推进");
+        }
         var projectNow = project with { PipelineId = recipe.PipelineId };
+        using var runLease = _runControl.Begin(projectNo, cancellationToken);
+        var runToken = runLease.Token;
 
         // 已完成的上一站：先进入下一站
         if (status == PipelineStageStatus.Completed)
@@ -169,7 +177,11 @@ public sealed class PipelineOrchestrator(
 
         for (var guard = 0; guard <= recipe.Stages.Count + 1; guard++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (_runControl.Reason(projectNo) is not null)
+            {
+                return BuildStoppedState(projectNo, recipe, stage);
+            }
+            runToken.ThrowIfCancellationRequested();
 
             if (stage.IsHumanGate)
             {
@@ -206,7 +218,12 @@ public sealed class PipelineOrchestrator(
             try
             {
                 result = await executor.ExecuteAsync(
-                    new PipelineStageContext(projectNo, projectNow, recipe, stage), cancellationToken).ConfigureAwait(false);
+                    new PipelineStageContext(projectNo, projectNow, recipe, stage), runToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // 暂停 / 终止：数据库状态已由控制端点落盘，按最新状态收口。
+                return BuildStoppedState(projectNo, recipe, stage);
             }
             catch (OperationCanceledException)
             {
@@ -217,6 +234,11 @@ public sealed class PipelineOrchestrator(
                 logger.LogWarning(ex, "流水线工序执行异常: {Project} stage={Stage}", projectNo, stage.Code);
                 projectNow = Persist(projectNow, recipe, stage, PipelineStageStatus.Failed, ex.Message);
                 return BuildState(projectNow, recipe, stage, PipelineStageStatus.Failed);
+            }
+
+            if (_runControl.Reason(projectNo) is not null)
+            {
+                return BuildStoppedState(projectNo, recipe, stage);
             }
 
             if (!result.Success)
@@ -256,6 +278,10 @@ public sealed class PipelineOrchestrator(
         if (Normalize(project.StageStatus) == PipelineStageStatus.Cancelled)
         {
             throw ApiException.Validation("任务已终止，无法审批；请新建任务后重试");
+        }
+        if (Normalize(project.StageStatus) == PipelineStageStatus.Paused)
+        {
+            throw ApiException.Validation("任务已暂停，请先恢复后再审批");
         }
         if (!stage.IsHumanGate)
         {
@@ -299,6 +325,10 @@ public sealed class PipelineOrchestrator(
         {
             throw ApiException.Validation("任务已终止，无法标记完成；请新建任务后重试");
         }
+        if (Normalize(project.StageStatus) == PipelineStageStatus.Paused)
+        {
+            throw ApiException.Validation("任务已暂停，请先恢复后再标记完成");
+        }
         if (stage.IsHumanGate)
         {
             throw ApiException.Validation("人工闸口请使用审批接口（通过/驳回），不能直接标记完成");
@@ -308,6 +338,74 @@ public sealed class PipelineOrchestrator(
         projectNow = Persist(projectNow, recipe, stage, PipelineStageStatus.Completed,
             string.IsNullOrWhiteSpace(note) ? "人工标记完成" : note!.Trim());
 
+        return await AdvanceAsync(projectNo, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>人工暂停：保留现场并中断当前运行；恢复后从当前工序继续。</summary>
+    public PipelineStateView Pause(string projectNo, string? note)
+    {
+        var project = RequireProject(projectNo);
+        var recipe = ResolveRecipe(project)
+            ?? throw ApiException.Validation($"选品来源「{project.SelectionSource}」未配置工作流配方（pipelines/*.yaml）");
+
+        var stage = recipe.FindStage(project.CurrentStage) ?? recipe.FirstStage;
+        if (stage is null)
+        {
+            throw ApiException.Validation($"配方 {recipe.PipelineId} 没有可执行工序");
+        }
+        var status = Normalize(project.StageStatus);
+        if (status == PipelineStageStatus.Completed)
+        {
+            throw ApiException.Validation("任务已完成，无需暂停");
+        }
+        if (status == PipelineStageStatus.Cancelled)
+        {
+            throw ApiException.Validation("任务已终止，不能暂停");
+        }
+        if (status == PipelineStageStatus.Paused)
+        {
+            return BuildState(project, recipe, stage, PipelineStageStatus.Paused);
+        }
+
+        _runControl.Stop(projectNo, "pause");
+        var projectNow = Persist(project with { PipelineId = recipe.PipelineId }, recipe, stage,
+            PipelineStageStatus.Paused,
+            string.IsNullOrWhiteSpace(note) ? "人工暂停：已中断后续工序分派" : note!.Trim());
+        logger.LogInformation("任务已暂停: {Project} stage={Stage}", projectNo, stage.Code);
+        return BuildState(projectNow, recipe, stage, PipelineStageStatus.Paused);
+    }
+
+    /// <summary>恢复暂停任务：回到 pending 后按配方继续推进当前工序。</summary>
+    public async Task<PipelineStateView> ResumeAsync(
+        string projectNo, string? note, CancellationToken cancellationToken = default)
+    {
+        var project = RequireProject(projectNo);
+        var recipe = ResolveRecipe(project)
+            ?? throw ApiException.Validation($"选品来源「{project.SelectionSource}」未配置工作流配方（pipelines/*.yaml）");
+
+        var stage = recipe.FindStage(project.CurrentStage) ?? recipe.FirstStage;
+        if (stage is null)
+        {
+            throw ApiException.Validation($"配方 {recipe.PipelineId} 没有可执行工序");
+        }
+        var status = Normalize(project.StageStatus);
+        if (status == PipelineStageStatus.Completed)
+        {
+            throw ApiException.Validation("任务已完成，无需恢复");
+        }
+        if (status == PipelineStageStatus.Cancelled)
+        {
+            throw ApiException.Validation("任务已终止，不能恢复");
+        }
+        if (status != PipelineStageStatus.Paused)
+        {
+            throw ApiException.Validation("任务当前未暂停");
+        }
+
+        Persist(project with { PipelineId = recipe.PipelineId }, recipe, stage,
+            PipelineStageStatus.Pending,
+            string.IsNullOrWhiteSpace(note) ? "人工恢复，继续推进" : note!.Trim());
+        logger.LogInformation("任务已恢复: {Project} stage={Stage}", projectNo, stage.Code);
         return await AdvanceAsync(projectNo, cancellationToken).ConfigureAwait(false);
     }
 
@@ -333,6 +431,7 @@ public sealed class PipelineOrchestrator(
             throw ApiException.Validation("任务已终止");
         }
 
+        _runControl.Stop(projectNo, "cancel");
         var projectNow = Persist(project with { PipelineId = recipe.PipelineId }, recipe, stage,
             PipelineStageStatus.Cancelled, string.IsNullOrWhiteSpace(note) ? "人工终止" : note!.Trim());
         logger.LogInformation("任务已终止: {Project} stage={Stage} note={Note}", projectNo, stage.Code, projectNow.StageNote);
@@ -395,12 +494,48 @@ public sealed class PipelineOrchestrator(
         $"选品来源「{project.SelectionSource ?? "未设置"}」未匹配到工作流配方：请在 pipelines/ 下新增 YAML 并声明 trigger_source",
         []);
 
+    /// <summary>被暂停/终止信号打断后，以数据库最新状态收口，绝不覆盖人工操作。</summary>
+    private PipelineStateView BuildStoppedState(string projectNo, PipelineRecipe recipe, PipelineStage fallbackStage)
+    {
+        var latest = RequireProject(projectNo);
+        var status = Normalize(latest.StageStatus);
+        var stage = recipe.FindStage(latest.CurrentStage) ?? fallbackStage;
+        var reason = _runControl.Reason(projectNo);
+
+        // 终态优先，避免「暂停」信号把并发落库的「终止 / 完成」覆盖掉。
+        if (status is PipelineStageStatus.Cancelled or PipelineStageStatus.Completed)
+        {
+            return BuildState(latest with { PipelineId = recipe.PipelineId }, recipe, stage, status);
+        }
+
+        // 控制端点先发信号再落库时，执行循环可能先读到旧 status；这里按信号补齐终态，
+        // 确保取消/暂停不会被后续 Persist(running/pending) 覆盖。
+        if (string.Equals(reason, "pause", StringComparison.Ordinal)
+            && status != PipelineStageStatus.Paused)
+        {
+            latest = Persist(latest with { PipelineId = recipe.PipelineId }, recipe, stage,
+                PipelineStageStatus.Paused, "人工暂停：已中断后续工序分派");
+            status = PipelineStageStatus.Paused;
+        }
+        else if (string.Equals(reason, "cancel", StringComparison.Ordinal)
+                 && status != PipelineStageStatus.Cancelled)
+        {
+            latest = Persist(latest with { PipelineId = recipe.PipelineId }, recipe, stage,
+                PipelineStageStatus.Cancelled, "人工终止");
+            status = PipelineStageStatus.Cancelled;
+        }
+
+        return BuildState(latest with { PipelineId = recipe.PipelineId }, recipe, stage, status);
+    }
+
     private static PipelineStateView BuildState(
         PipelineProjectSnapshot project, PipelineRecipe recipe, PipelineStage stage, string status)
     {
         var index = recipe.IndexOf(stage.Code);
         var completed = string.Equals(status, PipelineStageStatus.Completed)
                         && string.IsNullOrWhiteSpace(stage.Next);
+        var stopped = string.Equals(status, PipelineStageStatus.Cancelled)
+                      || string.Equals(status, PipelineStageStatus.Paused);
 
         var stages = recipe.Stages
             .Select((s, i) => new PipelineStageView(
@@ -423,9 +558,9 @@ public sealed class PipelineOrchestrator(
             index + 1,
             recipe.Stages.Count,
             completed,
-            !completed && !string.Equals(status, PipelineStageStatus.Cancelled),
+            !completed && !stopped,
             stage.IsHumanGate && string.Equals(status, PipelineStageStatus.WaitingHuman),
-            !stage.IsHumanGate
+            !stage.IsHumanGate && !stopped
                 && status is PipelineStageStatus.Pending or PipelineStageStatus.Blocked or PipelineStageStatus.Failed,
             null,
             stages);

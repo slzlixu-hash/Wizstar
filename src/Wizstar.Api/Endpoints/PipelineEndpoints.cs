@@ -1,7 +1,9 @@
 using System.Text.Json;
+using SqlSugar;
 using Wizstar.Agents.Audit;
 using Wizstar.Api.Pipelines;
 using Wizstar.Contracts;
+using Wizstar.Data.Entities.Business;
 
 namespace Wizstar.Api.Endpoints;
 
@@ -163,6 +165,114 @@ public static class PipelineEndpoints
             await AuditPipelineAsync(audit, "pipeline_complete", projectNo, state,
                 new { projectNo, Note = request?.Note }, ct).ConfigureAwait(false);
             return Results.Ok(ApiEnvelope<object>.Ok(state, context.TraceIdentifier));
+        });
+
+        // 暂停：保留现场并取消当前运行；不删除任何数据。
+        project.MapPost("/pause", async (
+            string projectNo, PipelineNoteRequest? request,
+            PipelineOrchestrator orchestrator, IAuditTrail audit, HttpContext context, CancellationToken ct) =>
+        {
+            var state = orchestrator.Pause(projectNo, request?.Note);
+            await AuditPipelineAsync(audit, "pipeline_pause", projectNo, state,
+                new { projectNo, Note = request?.Note }, ct).ConfigureAwait(false);
+            return Results.Ok(ApiEnvelope<object>.Ok(state, context.TraceIdentifier));
+        });
+
+        // 恢复：回到 pending 后继续推进当前工序。
+        project.MapPost("/resume", async (
+            string projectNo, PipelineNoteRequest? request,
+            PipelineOrchestrator orchestrator, IAuditTrail audit, HttpContext context, CancellationToken ct) =>
+        {
+            var state = await orchestrator.ResumeAsync(projectNo, request?.Note, ct).ConfigureAwait(false);
+            await AuditPipelineAsync(audit, "pipeline_resume", projectNo, state,
+                new { projectNo, Note = request?.Note }, ct).ConfigureAwait(false);
+            return Results.Ok(ApiEnvelope<object>.Ok(state, context.TraceIdentifier));
+        });
+
+        // 归档：终态任务的逻辑软删除（只更新 status=archived，不删历史）。
+        project.MapPost("/archive", async (
+            string projectNo, ISqlSugarClient db,
+            PipelineOrchestrator orchestrator, IAuditTrail audit,
+            HttpContext context, CancellationToken ct) =>
+        {
+            var state = orchestrator.GetState(projectNo);
+            var status = string.IsNullOrWhiteSpace(state.StageStatus)
+                ? PipelineStageStatus.Pending
+                : state.StageStatus.Trim().ToLowerInvariant();
+            if (status is not (PipelineStageStatus.Completed or PipelineStageStatus.Cancelled))
+            {
+                return Results.BadRequest(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError,
+                    "只有已完成或已终止的任务可以归档",
+                    context.TraceIdentifier));
+            }
+
+            var affected = db.Updateable<SkuProject>()
+                .SetColumns(p => p.Status == "archived")
+                .SetColumns(p => p.UpdatedAt == DateTime.Now)
+                .Where(p => p.ProjectNo == projectNo)
+                .ExecuteCommand();
+            if (affected == 0)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"商品不存在: {projectNo}", context.TraceIdentifier));
+            }
+
+            await AuditPipelineAsync(audit, "pipeline_archive", projectNo, state,
+                new { projectNo, Status = "archived" }, ct).ConfigureAwait(false);
+            return Results.Ok(ApiEnvelope<object>.Ok(new { projectNo, archived = true }, context.TraceIdentifier));
+        });
+
+        // 彻底删除：仅允许已归档任务；清理项目自有明细，订单等真实业务记录存在时拒绝。
+        project.MapDelete("/", async (
+            string projectNo, ISqlSugarClient db,
+            PipelineOrchestrator orchestrator, IAuditTrail audit,
+            HttpContext context, CancellationToken ct) =>
+        {
+            var project = db.Queryable<SkuProject>().First(p => p.ProjectNo == projectNo);
+            if (project is null)
+            {
+                return Results.NotFound(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, $"商品不存在: {projectNo}", context.TraceIdentifier));
+            }
+            if (!string.Equals(project.Status, "archived", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(ApiEnvelope<object>.Fail(
+                    ErrorCodes.ValidationError, "只有已归档任务可以删除", context.TraceIdentifier));
+            }
+
+            var orderItems = db.Queryable<EcomOrderItem>().Where(i => i.ProjectId == project.Id).Count();
+            if (orderItems > 0)
+            {
+                return Results.Json(
+                    ApiEnvelope<object>.Fail(
+                        ErrorCodes.PermissionDenied,
+                        $"该任务存在 {orderItems} 条订单明细，不能删除；请保留归档用于审计",
+                        context.TraceIdentifier),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            var state = orchestrator.GetState(projectNo);
+            try
+            {
+                db.Ado.BeginTran();
+                db.Deleteable<SkuVariant>().Where(v => v.ProjectId == project.Id).ExecuteCommand();
+                db.Deleteable<SkuChannelListing>().Where(v => v.ProjectId == project.Id).ExecuteCommand();
+                db.Deleteable<SkuMedia>().Where(v => v.ProjectId == project.Id).ExecuteCommand();
+                db.Deleteable<SkuSourcing>().Where(v => v.ProjectId == project.Id).ExecuteCommand();
+                db.Deleteable<SkuPipelineAudit>().Where(v => v.ProjectId == project.Id).ExecuteCommand();
+                db.Deleteable<SkuProject>().Where(p => p.Id == project.Id).ExecuteCommand();
+                db.Ado.CommitTran();
+            }
+            catch
+            {
+                db.Ado.RollbackTran();
+                throw;
+            }
+
+            await AuditPipelineAsync(audit, "pipeline_delete", projectNo, state,
+                new { projectNo, Status = "deleted" }, ct).ConfigureAwait(false);
+            return Results.Ok(ApiEnvelope<object>.Ok(new { projectNo, deleted = true }, context.TraceIdentifier));
         });
     }
 

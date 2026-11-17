@@ -104,6 +104,8 @@ public static class PipelineStageStatus
     public const string Completed = "completed";
     public const string Failed = "failed";
     public const string Blocked = "blocked";
+    /// <summary>人工暂停（保留现场；恢复后从当前工序继续）。</summary>
+    public const string Paused = "paused";
     /// <summary>人工终止（任务不再推进；重新执行需新建任务）。</summary>
     public const string Cancelled = "cancelled";
 }

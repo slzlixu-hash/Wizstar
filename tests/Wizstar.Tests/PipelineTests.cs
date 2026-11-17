@@ -390,6 +390,57 @@ public class PipelineCancelTests
     }
 }
 
+public class PipelinePauseTests
+{
+    private static (PipelineOrchestrator orchestrator, InMemoryPipelineStore store) Create()
+    {
+        var dir = new TempPipelineDir();
+        dir.Write("douyin.yaml", PipelineTestData.DouyinFlow);
+        var catalog = new PipelineCatalog(dir.Path, LoggerFactoryHolder.Create<PipelineCatalog>());
+        var store = new InMemoryPipelineStore();
+        store.Save(new PipelineProjectSnapshot("SP-P1", "douyin_compass", null, null, null, null));
+        return (new PipelineOrchestrator(
+            store, catalog, [new FakeStageExecutor("scout_ingest")],
+            LoggerFactoryHolder.Create<PipelineOrchestrator>()), store);
+    }
+
+    [Fact]
+    public async Task Pause_ThenResume_ContinuesFromCurrentStage()
+    {
+        var (orchestrator, store) = Create();
+
+        var paused = orchestrator.Pause("SP-P1", "午休暂停");
+        Assert.Equal(PipelineStageStatus.Paused, paused.StageStatus);
+        Assert.False(paused.CanAdvance);
+        Assert.Equal(PipelineStageStatus.Paused, store.Find("SP-P1")!.StageStatus);
+
+        var ex = await Assert.ThrowsAsync<Wizstar.Contracts.ApiException>(
+            () => orchestrator.AdvanceAsync("SP-P1"));
+        Assert.Contains("已暂停", ex.Message);
+
+        var resumed = await orchestrator.ResumeAsync("SP-P1", "继续跑");
+        // 首工序成功推进到下一站；下一站无执行器 → blocked
+        Assert.Equal("sourcing_1688", resumed.CurrentStage);
+        Assert.Equal(PipelineStageStatus.Blocked, resumed.StageStatus);
+    }
+
+    [Fact]
+    public void Pause_CompletedTask_IsRejected()
+    {
+        var dir = new TempPipelineDir();
+        dir.Write("douyin.yaml", PipelineTestData.DouyinFlow);
+        var catalog = new PipelineCatalog(dir.Path, LoggerFactoryHolder.Create<PipelineCatalog>());
+        var store = new InMemoryPipelineStore();
+        store.Save(new PipelineProjectSnapshot(
+            "SP-P2", "douyin_compass", "test_douyin", "publish_online", PipelineStageStatus.Completed, "已上架"));
+        var orchestrator = new PipelineOrchestrator(
+            store, catalog, [], LoggerFactoryHolder.Create<PipelineOrchestrator>());
+
+        var ex = Assert.Throws<Wizstar.Contracts.ApiException>(() => orchestrator.Pause("SP-P2", null));
+        Assert.Contains("已完成", ex.Message);
+    }
+}
+
 public class PipelineAutoGateTests
 {
     private const string AutoGateFlow = """
